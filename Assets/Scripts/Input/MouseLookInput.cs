@@ -6,15 +6,15 @@ namespace VexDesigner.InputSources
     /// <summary>
     /// Desktop implementation of <see cref="ILookInput"/>.
     ///
-    /// This is the only file in the camera system that knows a mouse exists.
-    /// Controls:
+    /// This is the only file in the camera system that knows a mouse or a
+    /// keyboard exists. Controls:
     ///   right mouse held  - orbit
     ///   middle mouse held - pan
     ///   scroll wheel      - zoom
+    ///   WASD              - move across the workspace
     ///
-    /// Left mouse is deliberately left free: it will be needed for selecting
-    /// and manipulating parts, and having it also drive the camera would make
-    /// that ambiguous.
+    /// Left mouse is deliberately left free: it selects and places parts, and
+    /// having it also drive the camera would make that ambiguous.
     /// </summary>
     public sealed class MouseLookInput : MonoBehaviour, ILookInput
     {
@@ -22,11 +22,17 @@ namespace VexDesigner.InputSources
         [Tooltip("Degrees of orbit per pixel of mouse movement.")]
         [SerializeField] private float orbitDegreesPerPixel = 0.22f;
 
-        [Tooltip("World units of pan per pixel of mouse movement.")]
-        [SerializeField] private float panUnitsPerPixel = 0.0015f;
+        [Tooltip("Fraction of the viewing distance panned per pixel of movement.")]
+        [SerializeField] private float panFractionPerPixel = 0.0016f;
 
-        [Tooltip("World units of zoom per scroll notch.")]
-        [SerializeField] private float zoomUnitsPerNotch = 0.12f;
+        [Tooltip("Fraction of the viewing distance zoomed per scroll notch.")]
+        [SerializeField] private float zoomFractionPerNotch = 0.16f;
+
+        [Tooltip("Metres per second of travel from the movement keys.")]
+        [SerializeField] private float moveSpeed = 0.9f;
+
+        [Tooltip("Multiplier while the sprint key is held.")]
+        [SerializeField] private float sprintMultiplier = 2.5f;
 
         [Header("Behaviour")]
         [Tooltip("Invert vertical orbit direction.")]
@@ -35,8 +41,15 @@ namespace VexDesigner.InputSources
         public Vector2 LookDelta { get; private set; }
         public float ZoomDelta { get; private set; }
         public Vector2 PanDelta { get; private set; }
+        public Vector2 MoveDelta { get; private set; }
 
         private void Update()
+        {
+            ReadMouse();
+            ReadKeyboard();
+        }
+
+        private void ReadMouse()
         {
             // Mouse.current is null when no mouse is present, which is exactly
             // the situation in VR. Failing quietly here rather than throwing
@@ -64,12 +77,42 @@ namespace VexDesigner.InputSources
             }
 
             PanDelta = mouse.middleButton.isPressed
-                ? -mouseDelta * panUnitsPerPixel
+                ? -mouseDelta * panFractionPerPixel
                 : Vector2.zero;
 
             // Scroll reports in units of 120 per notch on Windows.
             float scroll = mouse.scroll.ReadValue().y / 120f;
-            ZoomDelta = scroll * zoomUnitsPerNotch;
+            ZoomDelta = scroll * zoomFractionPerNotch;
+        }
+
+        private void ReadKeyboard()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                MoveDelta = Vector2.zero;
+                return;
+            }
+
+            var move = Vector2.zero;
+            if (keyboard.wKey.isPressed) { move.y += 1f; }
+            if (keyboard.sKey.isPressed) { move.y -= 1f; }
+            if (keyboard.dKey.isPressed) { move.x += 1f; }
+            if (keyboard.aKey.isPressed) { move.x -= 1f; }
+
+            // Normalise so diagonal travel is not faster than straight travel.
+            if (move.sqrMagnitude > 1f)
+            {
+                move.Normalize();
+            }
+
+            float speed = moveSpeed;
+            if (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed)
+            {
+                speed *= sprintMultiplier;
+            }
+
+            MoveDelta = move * speed * Time.deltaTime;
         }
     }
 }

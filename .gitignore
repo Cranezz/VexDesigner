@@ -104,3 +104,17 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# ---------------------------------------------------------------------------
+# CAD source files
+# ---------------------------------------------------------------------------
+# STEP files are a source format the game never reads, and they are large.
+# VEX publishes them, so they can always be fetched again. Committing one
+# would put it in git history permanently for no runtime benefit.
+#
+# Assets/PartInbox is the drop folder: files there are converted to meshes in
+# Assets/Parts and then deleted automatically. Nothing in it should ever be
+# committed.
+/[Aa]ssets/PartInbox/*
+!/[Aa]ssets/PartInbox/.gitkeep
+/PartSources/

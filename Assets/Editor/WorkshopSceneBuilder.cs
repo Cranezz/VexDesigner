@@ -7,6 +7,7 @@ namespace VexDesigner.EditorTools
     using UnityEngine.SceneManagement;
     using VexDesigner.CameraControl;
     using VexDesigner.InputSources;
+    using VexDesigner.Parts;
 
     /// <summary>
     /// Builds the phase-1 workshop scene from code.
@@ -64,6 +65,10 @@ namespace VexDesigner.EditorTools
         private const float LegInsetIn = 4f;
 
         private const float FloorSizeIn = 480f;
+
+        // Tray sits on the left of the table, clear of the mat. The mat spans
+        // -18 to +18 in X, so a 16 in tray centred here occupies -34 to -18.
+        private const float TrayCentreXIn = -26f;
 
         private static float In(float inches) => inches * InchesToMetres;
 
@@ -134,6 +139,21 @@ namespace VexDesigner.EditorTools
                 "CuttingMat_Albedo",
                 TilingFor(MatWidthIn, MatDepthIn, MatInchesPerTextureTile));
 
+            // Emission is enabled on these two so Highlightable can drive the
+            // hover glow. The keyword cannot be switched on from a property
+            // block, so a material without it simply never lights up.
+            Material trayMat = CreateMaterial(
+                "TrayShell", new Color(0.085f, 0.088f, 0.095f), 0.35f, null,
+                Vector2.one, enableEmission: true);
+
+            Material partMat = CreateMaterial(
+                "PartAluminium", new Color(0.68f, 0.70f, 0.74f), 0.45f, null,
+                Vector2.one, enableEmission: true, metallic: 0.85f);
+
+            // Definitions must exist before the tray can be stocked with them.
+            PartLibraryBuilder.Rebuild();
+            PartDefinition cChannel = FindPart("c-channel");
+
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -141,6 +161,11 @@ namespace VexDesigner.EditorTools
             BuildFloor(floorMat);
             BuildTable(tableMat, frameMat);
             BuildMat(matMat);
+
+            WorkshopTrayBuilder.Build(
+                new Vector2(TrayCentreXIn, 0f), TableHeightIn,
+                trayMat, partMat, cChannel);
+
             BuildCameraRig();
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -199,6 +224,10 @@ namespace VexDesigner.EditorTools
                 topMat);
             top.transform.SetParent(root.transform, true);
 
+            // The bare tabletop is a valid surface too, so parts set down
+            // beside the mat land on the bench rather than refusing to place.
+            top.AddComponent<PlacementSurface>();
+
             float legHeightIn = TableHeightIn - TableTopThicknessIn;
             float x = (TableWidthIn * 0.5f) - LegInsetIn - (LegThicknessIn * 0.5f);
             float z = (TableDepthIn * 0.5f) - LegInsetIn - (LegThicknessIn * 0.5f);
@@ -229,6 +258,9 @@ namespace VexDesigner.EditorTools
                 new Vector3(In(MatWidthIn), In(MatThicknessIn), In(MatDepthIn)),
                 mat);
             buildMat.isStatic = true;
+
+            // Parts may be set down here. The mat is the primary work surface.
+            buildMat.AddComponent<PlacementSurface>();
         }
 
         private static void BuildCameraRig()
@@ -237,7 +269,13 @@ namespace VexDesigner.EditorTools
             // zero. See WorkshopCameraRig for why this split matters for VR.
             var rig = new GameObject("CameraRig");
             rig.AddComponent<MouseLookInput>();
+            rig.AddComponent<MousePointerInput>();
             WorkshopCameraRig orbit = rig.AddComponent<WorkshopCameraRig>();
+
+            // Placement lives on the rig because it needs the pointer, which
+            // needs the camera. Keeping them together avoids a scene-wide
+            // lookup that would break if the rig were ever duplicated.
+            rig.AddComponent<PartPlacementController>();
 
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
@@ -265,7 +303,12 @@ namespace VexDesigner.EditorTools
             so.FindProperty("distance").floatValue = In(52f);
             so.FindProperty("minDistance").floatValue = In(6f);
             so.FindProperty("maxDistance").floatValue = In(140f);
-            so.FindProperty("maxPanFromOrigin").floatValue = In(MatWidthIn * 0.5f);
+            // Travel covers the whole bench, tray included, as a box rather
+            // than a sphere - a spherical limit shrinks the reachable area
+            // diagonally and feels like an invisible wall short of the edge.
+            so.FindProperty("panLimitX").floatValue = In(TableWidthIn * 0.5f);
+            so.FindProperty("panLimitZ").floatValue = In(TableDepthIn * 0.5f);
+            so.FindProperty("panLimitY").floatValue = In(16f);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -293,8 +336,29 @@ namespace VexDesigner.EditorTools
             return go;
         }
 
+        private static PartDefinition FindPart(string idContains)
+        {
+            foreach (string guid in AssetDatabase.FindAssets("t:PartDefinition"))
+            {
+                var definition = AssetDatabase.LoadAssetAtPath<PartDefinition>(
+                    AssetDatabase.GUIDToAssetPath(guid));
+
+                if (definition != null && definition.partId.Contains(idContains))
+                {
+                    return definition;
+                }
+            }
+
+            Debug.LogWarning(
+                $"[WorkshopSceneBuilder] No part definition matching '{idContains}'. " +
+                "The tray will be built empty. Convert a STEP file into " +
+                "Assets/Parts and run VexDesigner > Rebuild Part Library.");
+            return null;
+        }
+
         private static Material CreateMaterial(
-            string name, Color colour, float roughness, string textureName, Vector2 tiling)
+            string name, Color colour, float roughness, string textureName, Vector2 tiling,
+            bool enableEmission = false, float metallic = 0f)
         {
             string path = $"{MaterialsFolder}/{name}.mat";
 
@@ -328,6 +392,22 @@ namespace VexDesigner.EditorTools
             if (mat.HasProperty("_Glossiness"))
             {
                 mat.SetFloat("_Glossiness", 1f - roughness);
+            }
+            if (mat.HasProperty("_Metallic"))
+            {
+                mat.SetFloat("_Metallic", metallic);
+            }
+
+            if (enableEmission)
+            {
+                // Black emission is invisible; Highlightable raises it on hover.
+                mat.EnableKeyword("_EMISSION");
+                mat.globalIlluminationFlags =
+                    MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                if (mat.HasProperty("_EmissionColor"))
+                {
+                    mat.SetColor("_EmissionColor", Color.black);
+                }
             }
 
             if (!string.IsNullOrEmpty(textureName))

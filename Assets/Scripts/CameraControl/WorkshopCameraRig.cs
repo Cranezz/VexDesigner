@@ -4,28 +4,32 @@ namespace VexDesigner.CameraControl
     using VexDesigner.InputSources;
 
     /// <summary>
-    /// Orbits the view around a fixed focus point on the workshop table.
+    /// Orbits and moves the view around the workshop table.
     ///
-    /// IMPORTANT — component placement. This goes on a *parent* object, with
+    /// IMPORTANT - component placement. This goes on a *parent* object, with
     /// the Camera as a child sitting at local position zero. The rig never
     /// touches the camera's own transform.
     ///
     /// That separation is not decoration. In VR the headset drives the camera
-    /// transform directly and anything else writing to it fights the tracking
+    /// transform directly, and anything else writing to it fights the tracking
     /// system, which is a well-known way to make people motion sick. Moving a
     /// parent instead is how every VR locomotion system works, and it means
     /// this object becomes the XR Origin later with no restructuring.
-    ///
-    /// Phase 1 deliberately has no walking: the viewer is planted at the table.
     /// </summary>
     public sealed class WorkshopCameraRig : MonoBehaviour
     {
         [Header("Focus")]
-        [Tooltip("World point the view orbits around. Normally the build plate.")]
-        [SerializeField] private Vector3 focusPoint = new Vector3(0f, 0.95f, 0f);
+        [Tooltip("World point the view orbits around.")]
+        [SerializeField] private Vector3 focusPoint = new Vector3(0f, 0.9144f, 0f);
 
-        [Tooltip("How far the pivot may be panned from its starting point.")]
-        [SerializeField] private float maxPanFromOrigin = 0.75f;
+        [Tooltip("Half-extent of travel along X, in world units.")]
+        [SerializeField] private float panLimitX = 0.95f;
+
+        [Tooltip("Half-extent of travel along Z, in world units.")]
+        [SerializeField] private float panLimitZ = 0.5f;
+
+        [Tooltip("How far the focus may be raised or lowered from its start.")]
+        [SerializeField] private float panLimitY = 0.4f;
 
         [Header("Orbit")]
         [SerializeField] private float yaw = 35f;
@@ -33,18 +37,18 @@ namespace VexDesigner.CameraControl
 
         [Tooltip("Lowest pitch, in degrees. Kept above zero so the view cannot " +
                  "drop below the tabletop and look up through it.")]
-        [SerializeField] private float minPitch = 6f;
+        [SerializeField] private float minPitch = 4f;
 
         [SerializeField] private float maxPitch = 85f;
 
         [Header("Distance")]
-        [SerializeField] private float distance = 1.6f;
-        [SerializeField] private float minDistance = 0.35f;
-        [SerializeField] private float maxDistance = 4.0f;
+        [SerializeField] private float distance = 1.32f;
+        [SerializeField] private float minDistance = 0.15f;
+        [SerializeField] private float maxDistance = 3.55f;
 
         [Header("Feel")]
-        [Tooltip("Seconds to catch up to the target orientation. 0 = instant. " +
-                 "A little smoothing reads as more precise, not less.")]
+        [Tooltip("Seconds to catch up to the target. 0 = instant. A little " +
+                 "smoothing reads as more precise, not less.")]
         [SerializeField, Range(0f, 0.3f)] private float smoothTime = 0.06f;
 
         private ILookInput input;
@@ -108,25 +112,64 @@ namespace VexDesigner.CameraControl
             yaw += look.x;
             pitch = Mathf.Clamp(pitch + look.y, minPitch, maxPitch);
 
-            // Scale zoom by current distance so it feels consistent: a fixed
-            // step is uselessly slow when far out and violently fast up close.
-            float zoom = input.ZoomDelta * distance;
-            distance = Mathf.Clamp(distance - zoom, minDistance, maxDistance);
+            // Zoom arrives as a fraction of current distance, so a notch moves
+            // the same *proportion* whether you are close in or far out. A
+            // fixed step is uselessly slow when far away and violently fast up
+            // close.
+            distance = Mathf.Clamp(
+                distance * (1f - input.ZoomDelta), minDistance, maxDistance);
 
+            Vector3 shift = Vector3.zero;
+
+            // Drag-pan: screen-relative, so it tracks the cursor exactly.
             Vector2 pan = input.PanDelta;
             if (pan != Vector2.zero)
             {
-                // Pan relative to where the viewer is looking, scaled by
-                // distance for the same reason as zoom above.
-                Vector3 shift = (transform.right * pan.x + transform.up * pan.y) * distance;
-                Vector3 panned = focusPoint + shift;
-
-                // Tethered to the starting point: phase 1 is a fixed
-                // workstation, and free panning would let the user lose the
-                // table entirely with no way to recover.
-                focusPoint = focusOrigin + Vector3.ClampMagnitude(
-                    panned - focusOrigin, maxPanFromOrigin);
+                shift += (transform.right * pan.x + transform.up * pan.y) * distance;
             }
+
+            // Key-move: travels across the workspace on the ground plane.
+            // Uses the flattened heading rather than the camera's forward, so
+            // looking down at the table does not shrink how far W travels.
+            Vector2 move = input.MoveDelta;
+            if (move != Vector2.zero)
+            {
+                Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+
+                // Looking straight down leaves no usable heading; fall back to
+                // the rig's up vector, which points "north" on the table then.
+                if (forward.sqrMagnitude < 0.0001f)
+                {
+                    forward = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+                }
+
+                forward.Normalize();
+                Vector3 right = Vector3.Cross(Vector3.up, forward).normalized * -1f;
+
+                shift += (right * move.x) + (forward * move.y);
+            }
+
+            if (shift != Vector3.zero)
+            {
+                focusPoint = ClampToWorkspace(focusPoint + shift);
+            }
+        }
+
+        /// <summary>
+        /// Constrains the focus to a box around its starting point.
+        ///
+        /// Deliberately a box, not a sphere. The workspace is a rectangular
+        /// table, and a spherical limit makes the reachable area shrink as you
+        /// move diagonally - which feels like hitting an invisible wall well
+        /// short of the table edge.
+        /// </summary>
+        private Vector3 ClampToWorkspace(Vector3 candidate)
+        {
+            Vector3 offset = candidate - focusOrigin;
+            offset.x = Mathf.Clamp(offset.x, -panLimitX, panLimitX);
+            offset.y = Mathf.Clamp(offset.y, -panLimitY, panLimitY);
+            offset.z = Mathf.Clamp(offset.z, -panLimitZ, panLimitZ);
+            return focusOrigin + offset;
         }
 
         private void ApplyTransform(float y, float p, float d, Vector3 focus)
@@ -161,8 +204,15 @@ namespace VexDesigner.CameraControl
 
         private void OnDrawGizmosSelected()
         {
+            Vector3 origin = Application.isPlaying ? focusOrigin : focusPoint;
+
             Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(Application.isPlaying ? focusPoint : focusPoint, 0.03f);
+            Gizmos.DrawWireSphere(focusPoint, 0.03f);
+
+            // Show the travel box so the limits are visible while tuning.
+            Gizmos.color = new Color(0f, 1f, 1f, 0.25f);
+            Gizmos.DrawWireCube(
+                origin, new Vector3(panLimitX * 2f, panLimitY * 2f, panLimitZ * 2f));
         }
     }
 }

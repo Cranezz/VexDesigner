@@ -21,15 +21,25 @@ namespace VexDesigner.InputSources
         Vector2 LookDelta { get; }
 
         /// <summary>
-        /// Requested change in viewing distance this frame, in world units.
-        /// Positive moves the viewer closer.
+        /// Requested change in viewing distance this frame, as a fraction of
+        /// the current distance. Positive moves the viewer closer.
         /// </summary>
         float ZoomDelta { get; }
 
         /// <summary>
         /// Requested lateral shift of the point being looked at, in world units
-        /// relative to the current view orientation.
+        /// relative to the current view orientation. Screen-relative dragging.
         /// </summary>
         Vector2 PanDelta { get; }
+
+        /// <summary>
+        /// Requested travel across the workspace this frame, in world units.
+        /// x = right, y = forward, both relative to the current view heading.
+        ///
+        /// Distinct from <see cref="PanDelta"/> because it is a sustained
+        /// held-key motion rather than a one-to-one drag, so the camera scales
+        /// it by delta time. In VR this becomes stick locomotion.
+        /// </summary>
+        Vector2 MoveDelta { get; }
     }
 }

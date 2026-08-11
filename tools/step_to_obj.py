@@ -36,17 +36,21 @@ MM_PER_INCH = 25.4
 
 # Fine enough that a 5 mm hole stays round, coarse enough to keep triangle
 # counts sane across a parts library of this size.
-DEFAULT_DEFLECTION_MM = 0.05
+DEFAULT_DEFLECTION_MM = 0.1
 
-# Tessellation tolerance for curved surfaces, in degrees.
-ANGULAR_DEFLECTION_DEG = 0.35
+# Tessellation tolerance for curved surfaces, in degrees. This, not the linear
+# deflection, is what actually drives triangle count on VEX parts: the geometry
+# is dominated by small cylindrical hole walls, and the angular setting decides
+# how many segments each of those circles gets. 360/15 = 24 segments per hole
+# is plenty at the scale a screw hole is ever viewed.
+DEFAULT_ANGULAR_DEG = 15.0
 
 
 def describe(label, mm):
     return "{:<8} {:9.3f} mm  =  {:8.4f} in".format(label, mm, mm / MM_PER_INCH)
 
 
-def convert(src, dst, deflection):
+def convert(src, dst, deflection, angular):
     if not os.path.isfile(src):
         raise SystemExit("Source file not found: {}".format(src))
 
@@ -62,11 +66,11 @@ def convert(src, dst, deflection):
     print("  " + describe("Z", bb.ZLength))
     print("")
 
-    print("Tessellating at {} mm linear deflection...".format(deflection))
+    print("Tessellating: linear {} mm, angular {} deg...".format(deflection, angular))
     mesh = MeshPart.meshFromShape(
         Shape=shape,
         LinearDeflection=deflection,
-        AngularDeflection=ANGULAR_DEFLECTION_DEG,
+        AngularDeflection=angular,
         Relative=False,
     )
 
@@ -96,7 +100,8 @@ def main():
         )
 
     deflection = float(os.environ.get("DEFLECTION_MM", DEFAULT_DEFLECTION_MM))
-    convert(src, dst, deflection)
+    angular = float(os.environ.get("ANGULAR_DEG", DEFAULT_ANGULAR_DEG))
+    convert(src, dst, deflection, angular)
 
 
 # Called unconditionally, with no __name__ == "__main__" guard. FreeCAD execs
