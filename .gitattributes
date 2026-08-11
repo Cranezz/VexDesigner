@@ -1,0 +1,60 @@
+# Force LF normalization for text so Windows/macOS collaborators don't churn diffs.
+* text=auto
+
+# Unity YAML files. These are text and MUST stay text so they can be merged
+# with Unity's own SmartMerge tool (see docs/SETUP.md).
+*.unity      text eol=lf
+*.prefab     text eol=lf
+*.asset      text eol=lf
+*.mat        text eol=lf
+*.meta       text eol=lf
+*.controller text eol=lf
+*.anim       text eol=lf
+*.physicMaterial text eol=lf
+*.asmdef     text eol=lf
+*.json       text eol=lf
+*.cs         text eol=lf diff=csharp
+
+# ---------------------------------------------------------------------------
+# Git LFS
+# ---------------------------------------------------------------------------
+# VEX part meshes are the whole point of this project and there will eventually
+# be hundreds of them. A raw OBJ of a single C-channel at full detail is easily
+# multiple MB, and git stores a fresh copy of a file on every change. Without
+# LFS the repo would balloon past GitHub's limits within a few dozen parts.
+#
+# NOTE: LFS rules only apply to files added AFTER the rule exists. If a mesh
+# gets committed normally first, adding it here later does not retroactively
+# shrink the repo.
+
+# 3D models / part source geometry
+*.obj  filter=lfs diff=lfs merge=lfs -text
+*.stl  filter=lfs diff=lfs merge=lfs -text
+*.fbx  filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.dae  filter=lfs diff=lfs merge=lfs -text
+*.3ds  filter=lfs diff=lfs merge=lfs -text
+*.step filter=lfs diff=lfs merge=lfs -text
+*.stp  filter=lfs diff=lfs merge=lfs -text
+
+# Textures
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.tif  filter=lfs diff=lfs merge=lfs -text
+*.tiff filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+
+# Audio
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+
+# Compiled / binary blobs
+*.dll  filter=lfs diff=lfs merge=lfs -text
+*.so   filter=lfs diff=lfs merge=lfs -text
+*.a    filter=lfs diff=lfs merge=lfs -text
+*.bundle filter=lfs diff=lfs merge=lfs -text
