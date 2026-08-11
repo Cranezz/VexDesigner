@@ -28,6 +28,17 @@ namespace VexDesigner.EditorTools
         private const string PartsFolder = "Assets/Parts/";
         private const float MillimetresToMetres = 0.001f;
 
+        /// <summary>
+        /// Bump this whenever the settings below change.
+        ///
+        /// Unity caches import results and will not re-run a postprocessor
+        /// over already-imported assets just because its code changed. Without
+        /// a version bump, a rule change would apply only to parts imported
+        /// afterwards, leaving older ones silently on the old settings - the
+        /// exact inconsistency this class exists to prevent.
+        /// </summary>
+        public override uint GetVersion() => 1;
+
         private void OnPreprocessModel()
         {
             if (!assetPath.Replace('\\', '/').StartsWith(PartsFolder))
