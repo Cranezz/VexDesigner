@@ -136,6 +136,10 @@ Version the format from the first write:
 
 Cheap now; the only thing that lets old save files survive a format change.
 
+This same schema is what gets sent over the network when multiplayer arrives
+(§6) — a save file and a late-joining client's initial state are the same
+thing. Keeping one schema for both is deliberate.
+
 ---
 
 ## 5. Undo/redo
@@ -150,14 +154,106 @@ re-slice from the pristine mesh", which is cheap and exact.
 Every mutating action goes through the stack. If some actions bypass it, undo
 becomes untrustworthy, and an untrustworthy undo is worse than none.
 
+The same discipline is what makes multiplayer possible later: a command that
+can be applied and reverted locally is also a command that can be sent to
+another client. See §6 — including the warning that *multi-user* undo
+semantics are a genuinely hard problem worth deciding before the undo UI is
+built.
+
 ---
 
-## 6. Deferred (noted, not built)
+## 6. Multiplayer readiness
+
+Multiplayer is a long-term goal, not a phase-1 feature. It is called out here
+because unlike VR — which is mostly an input and rendering concern and can
+genuinely be deferred — **multiplayer constrains how state is represented**,
+and that is expensive to retrofit.
+
+The encouraging part: this project is unusually well suited to it, and §2, §4
+and §5 have already done most of the work by accident.
+
+### The core rule: document state vs presentation state
+
+Split everything into two categories and never confuse them.
+
+| | Document state | Presentation state |
+|---|---|---|
+| Examples | Part IDs, transforms, cut op lists, joins | Meshes, colliders, renderers, materials, camera |
+| Authoritative? | **Yes** | No — always derived |
+| Saved? | Yes | Never |
+| Networked? | Yes | Never |
+| Lives in | Plain C# classes | MonoBehaviours |
+
+Document state is small, serializable, and the single source of truth.
+Presentation state is regenerated from it and is disposable.
+
+This one split satisfies three separate requirements at once — the save format
+needs it, undo needs it, and networking needs it. That is why it is worth
+holding to strictly even before any networking exists.
+
+### Sync operations, never geometry
+
+A cut is a plane: roughly sixteen bytes. A cut *mesh* is megabytes.
+
+Because §2 makes every cut a plane and §5 makes every mutation a command,
+the network payload is already defined:
+
+    saved cut op == a plane == one slice == one undo step == one network message
+
+Clients never exchange mesh data. They exchange the operation, and each client
+re-derives its own geometry from the pristine imported mesh. Bandwidth is
+trivial and latency tolerance is high, because nothing here is twitch-based.
+
+**On floating-point determinism:** re-slicing on different machines can produce
+vertex positions that differ in the last few bits. This does not matter, and it
+is important to understand why — the *document* is the operation list, not the
+mesh. Two clients with an identical operation list are in agreement even if
+their vertex buffers differ microscopically. Only diverge-checking should ever
+compare document state, never geometry.
+
+### What must be true from the start
+
+These are cheap now and painful later:
+
+1. **Stable IDs, not object references.** Every part gets an ID that means the
+   same thing on every machine and across save/load. Unity object references
+   survive neither serialization nor the network.
+2. **Every mutation goes through a command object.** Already required by §5.
+   Commands must be serializable, and must carry enough information to be
+   applied by a machine that did not originate them.
+3. **Core logic outside MonoBehaviours.** The document model should be plain C#
+   with no `UnityEngine` dependency beyond maths types. This keeps it testable,
+   serializable, and portable to a headless server later.
+4. **No logic that reads live scene state as truth.** Anything that asks the
+   scene "where is this part?" instead of asking the document will desync.
+
+### Open design questions (do not need answering yet)
+
+- **Ownership.** Two users cutting the same part at once needs either locking,
+  or per-part ownership, or last-write-wins with a visible conflict.
+- **Undo semantics.** This is the genuinely hard one. A single global undo
+  stack means your undo can revert someone else's work. Per-user undo requires
+  operations to be rebaseable — which is a real distributed-systems problem,
+  and the reason collaborative editors are hard. Worth deciding *before*
+  building the undo UI, since it changes the stack's shape.
+- **Late join.** Sending the full document is fine — it is small by design.
+
+### Library choice (deferred)
+
+Netcode for GameObjects (Unity's own), Mirror, FishNet, or Photon. The decision
+can wait: this app sends small messages infrequently with no prediction or
+rollback requirements, so it is not demanding on any of them. Avoid choosing
+early and coupling the document model to a specific library's types.
+
+---
+
+## 7. Deferred (noted, not built)
 
 | Item | Notes |
 |---|---|
+| Multiplayer | See §6. Not built, but the state model is shaped for it now. |
 | VR / OpenXR | Add `com.unity.xr.openxr` + XR Interaction Toolkit. Target Steam Frame. Architecture already input-abstracted (§1). |
-| Paint / spray tool | Likely a vertex-colour or decal approach. |
+| Paint / spray tool | Likely a vertex-colour or decal approach. Note this is document state, not presentation — it has to save and sync. |
 | Direct part manipulation | Phase 1 moves the camera only. |
 | Angled-cut side selection UI | Short/mid/long-side measurement input. The *maths* should be built into the cut op early even if the UI is not. |
 | Multi-part simultaneous cutting | |

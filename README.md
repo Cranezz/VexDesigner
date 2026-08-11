@@ -60,3 +60,10 @@ Open `Assets/Scenes/Workshop.unity` and press Play.
 | 1 | Workshop scene, camera, part import, hole detection, table saw, undo/redo, JSON save format |
 | 2 | Parts tree panel, import quality controls, direct part manipulation |
 | 3 | VR (OpenXR / Steam Frame), paint tool |
+| 4 | Multiplayer — collaborative building |
+
+VR and multiplayer are both long-term goals, and the architecture is shaped for
+them from the start even though neither is built. They are deferred for
+different reasons: VR is mostly an input and rendering concern and can be added
+late, whereas multiplayer constrains how state is represented and so has to be
+respected in every phase. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) §6.
