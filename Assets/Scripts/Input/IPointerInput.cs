@@ -33,5 +33,18 @@ namespace VexDesigner.InputSources
         /// world. Prevents a click on a button from also placing a part.
         /// </summary>
         bool IsOverInterface { get; }
+
+        /// <summary>
+        /// True while the secondary action is held - right mouse on desktop.
+        /// Used to rotate a carried part.
+        /// </summary>
+        bool SecondaryHeld { get; }
+
+        /// <summary>
+        /// Raw pointer movement this frame, in device units. Only meaningful
+        /// paired with a held button; on its own the aim ray already says
+        /// where the user is pointing.
+        /// </summary>
+        Vector2 DragDelta { get; }
     }
 }

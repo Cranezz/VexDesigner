@@ -43,10 +43,26 @@ namespace VexDesigner.InputSources
         public Vector2 PanDelta { get; private set; }
         public Vector2 MoveDelta { get; private set; }
 
+        private VexDesigner.Parts.InteractionLock interactionLock;
+
+        private void Awake()
+        {
+            // Optional. Without it the camera simply always owns right-drag.
+            interactionLock = GetComponentInParent<VexDesigner.Parts.InteractionLock>();
+        }
+
         private void Update()
         {
             ReadMouse();
             ReadKeyboard();
+
+            // Right-drag rotates a carried part instead of orbiting. Zeroed
+            // here rather than in the camera so every consumer of this input
+            // sees the same thing.
+            if (interactionLock != null && interactionLock.CameraOrbitLocked)
+            {
+                LookDelta = Vector2.zero;
+            }
         }
 
         private void ReadMouse()

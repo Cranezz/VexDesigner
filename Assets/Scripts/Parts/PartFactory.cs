@@ -33,10 +33,15 @@ namespace VexDesigner.Parts
             filter.sharedMesh = definition.mesh;
 
             var renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = GetMaterial(definition);
+            renderer.sharedMaterial = GetSharedMaterial(definition);
 
             var instance = go.AddComponent<PartInstance>();
             instance.Initialise(definition);
+
+            // Placed parts are pickable again, so a robot can be rearranged
+            // rather than only ever added to.
+            go.AddComponent<Highlightable>();
+            go.AddComponent<PickupHandle>();
 
             var collider = go.AddComponent<MeshCollider>();
 
@@ -81,7 +86,12 @@ namespace VexDesigner.Parts
             body.angularDamping = 0.6f;
         }
 
-        private static Material GetMaterial(PartDefinition definition)
+        /// <summary>
+        /// Shared material for a part type. Public so shelf display copies use
+        /// the identical material and batch with placed parts rather than
+        /// doubling the draw calls.
+        /// </summary>
+        public static Material GetSharedMaterial(PartDefinition definition)
         {
             if (MaterialCache.TryGetValue(definition, out Material cached) && cached != null)
             {

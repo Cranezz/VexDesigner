@@ -144,7 +144,11 @@ namespace VexDesigner.CameraControl
                 }
 
                 forward.Normalize();
-                Vector3 right = Vector3.Cross(Vector3.up, forward).normalized * -1f;
+
+                // cross(up, forward) already points right in Unity's left-handed
+                // coordinate system. An extra negation here was what made A and
+                // D travel the wrong way.
+                Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
 
                 shift += (right * move.x) + (forward * move.y);
             }

@@ -20,6 +20,8 @@ namespace VexDesigner.InputSources
         public bool PrimaryPressedThisFrame { get; private set; }
         public bool RepeatModifierHeld { get; private set; }
         public bool IsOverInterface { get; private set; }
+        public bool SecondaryHeld { get; private set; }
+        public Vector2 DragDelta { get; private set; }
 
         private void Update()
         {
@@ -31,6 +33,8 @@ namespace VexDesigner.InputSources
                 PrimaryPressedThisFrame = false;
                 RepeatModifierHeld = false;
                 IsOverInterface = false;
+                SecondaryHeld = false;
+                DragDelta = Vector2.zero;
                 return;
             }
 
@@ -38,6 +42,8 @@ namespace VexDesigner.InputSources
             AimRay = cam.ScreenPointToRay(screen);
 
             PrimaryPressedThisFrame = mouse.leftButton.wasPressedThisFrame;
+            SecondaryHeld = mouse.rightButton.isPressed;
+            DragDelta = mouse.delta.ReadValue();
 
             Keyboard keyboard = Keyboard.current;
             RepeatModifierHeld = keyboard != null &&

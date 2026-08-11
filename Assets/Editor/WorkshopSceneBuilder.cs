@@ -66,9 +66,15 @@ namespace VexDesigner.EditorTools
 
         private const float FloorSizeIn = 480f;
 
-        // Tray sits on the left of the table, clear of the mat. The mat spans
-        // -18 to +18 in X, so a 16 in tray centred here occupies -34 to -18.
-        private const float TrayCentreXIn = -26f;
+        // Shelf occupies the left of the bench, clear of the mat. The mat spans
+        // -18 to +18 in X, so a 16 in shelf centred here occupies -34 to -18.
+        //
+        // Deeper than wide on purpose: a 35-hole C-channel is 17.5 in long and
+        // has to lie down inside the region, so the long axis runs front to
+        // back where there is room for it.
+        private const float ShelfCentreXIn = -26f;
+        private const float ShelfWidthIn = 16f;
+        private const float ShelfDepthIn = 30f;
 
         private static float In(float inches) => inches * InchesToMetres;
 
@@ -150,9 +156,10 @@ namespace VexDesigner.EditorTools
                 "PartAluminium", new Color(0.68f, 0.70f, 0.74f), 0.45f, null,
                 Vector2.one, enableEmission: true, metallic: 0.85f);
 
-            // Definitions must exist before the tray can be stocked with them.
+            // Definitions must exist before the shelf can list them. The shelf
+            // itself loads them at runtime from Resources, so a part converted
+            // later appears without touching this scene.
             PartLibraryBuilder.Rebuild();
-            PartDefinition cChannel = FindPart("c-channel");
 
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -161,11 +168,7 @@ namespace VexDesigner.EditorTools
             BuildFloor(floorMat);
             BuildTable(tableMat, frameMat);
             BuildMat(matMat);
-
-            WorkshopTrayBuilder.Build(
-                new Vector2(TrayCentreXIn, 0f), TableHeightIn,
-                trayMat, partMat, cChannel);
-
+            BuildShelf(partMat, trayMat);
             BuildCameraRig();
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -272,6 +275,10 @@ namespace VexDesigner.EditorTools
             rig.AddComponent<MousePointerInput>();
             WorkshopCameraRig orbit = rig.AddComponent<WorkshopCameraRig>();
 
+            // Lets placement claim the right-drag gesture from the camera while
+            // a part is being rotated, without either knowing about the other.
+            rig.AddComponent<InteractionLock>();
+
             // Placement lives on the rig because it needs the pointer, which
             // needs the camera. Keeping them together avoids a scene-wide
             // lookup that would break if the rig were ever duplicated.
@@ -336,24 +343,114 @@ namespace VexDesigner.EditorTools
             return go;
         }
 
-        private static PartDefinition FindPart(string idContains)
+        /// <summary>
+        /// The parts shelf: a marked-out patch of bench to the left of the mat
+        /// where one of every catalogued part is laid out, paged.
+        ///
+        /// The region is deeper than it is wide because the longest common VEX
+        /// stock - a 35-hole C-channel at 17.5 in - has to lie down inside it.
+        /// Laying parts along the short axis would leave the biggest ones
+        /// unplaceable.
+        /// </summary>
+        private static void BuildShelf(Material partMaterial, Material furnitureMaterial)
         {
-            foreach (string guid in AssetDatabase.FindAssets("t:PartDefinition"))
-            {
-                var definition = AssetDatabase.LoadAssetAtPath<PartDefinition>(
-                    AssetDatabase.GUIDToAssetPath(guid));
+            var root = new GameObject("PartsShelf");
+            root.transform.position = new Vector3(In(ShelfCentreXIn), In(TableHeightIn), 0f);
 
-                if (definition != null && definition.partId.Contains(idContains))
-                {
-                    return definition;
-                }
+            var shelf = root.AddComponent<PartShelf>();
+
+            var so = new SerializedObject(shelf);
+            so.FindProperty("regionWidthIn").floatValue = ShelfWidthIn;
+            so.FindProperty("regionDepthIn").floatValue = ShelfDepthIn;
+            so.FindProperty("partMaterial").objectReferenceValue = partMaterial;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            // Faint outline so the shelf region reads as a designated area
+            // rather than parts happening to sit there.
+            GameObject outline = CreateBox(
+                "ShelfSurface",
+                new Vector3(In(ShelfCentreXIn), In(TableHeightIn + 0.01f), 0f),
+                new Vector3(In(ShelfWidthIn), In(0.02f), In(ShelfDepthIn)),
+                furnitureMaterial);
+            outline.isStatic = true;
+            outline.GetComponent<Collider>().enabled = false;
+
+            float controlsZ = (ShelfDepthIn * 0.5f) + 2.5f;
+            BuildPageArrow(root, shelf, -1, new Vector3(ShelfCentreXIn - 4f, TableHeightIn, controlsZ), furnitureMaterial);
+            BuildPageArrow(root, shelf, +1, new Vector3(ShelfCentreXIn + 4f, TableHeightIn, controlsZ), furnitureMaterial);
+            BuildPageLabel(root, shelf, new Vector3(ShelfCentreXIn, TableHeightIn + 0.1f, controlsZ));
+        }
+
+        private static void BuildPageArrow(
+            GameObject parent, PartShelf shelf, int direction, Vector3 positionIn, Material material)
+        {
+            var go = new GameObject(direction < 0 ? "PageArrow_Prev" : "PageArrow_Next");
+            go.transform.SetParent(parent.transform, true);
+            go.transform.position = new Vector3(In(positionIn.x), In(positionIn.y), In(positionIn.z));
+
+            // Point the flat chevron left or right across the bench.
+            go.transform.rotation = Quaternion.Euler(0f, direction < 0 ? 180f : 0f, 0f);
+
+            go.AddComponent<MeshFilter>().sharedMesh = BuildArrowMesh();
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+
+            var box = go.AddComponent<BoxCollider>();
+            box.size = new Vector3(In(3f), In(1.2f), In(3f));
+            box.center = new Vector3(0f, In(0.4f), 0f);
+
+            go.AddComponent<Highlightable>();
+            go.AddComponent<ShelfPageArrow>().Configure(shelf, direction);
+        }
+
+        /// <summary>
+        /// A flat triangular chevron lying on the bench. Built from code
+        /// because it is three vertices and pulling in an art asset for that
+        /// would be sillier than the twelve lines below.
+        /// </summary>
+        private static Mesh BuildArrowMesh()
+        {
+            float halfLength = In(1.2f);
+            float halfWidth = In(1.2f);
+            float lift = In(0.05f);
+
+            var mesh = new Mesh { name = "PageArrow" };
+            mesh.vertices = new[]
+            {
+                new Vector3(halfLength, lift, 0f),
+                new Vector3(-halfLength * 0.6f, lift, halfWidth),
+                new Vector3(-halfLength * 0.6f, lift, -halfWidth),
+            };
+
+            // Wound both ways so the chevron is visible from underneath the
+            // bench as well, which matters once the camera can drop low.
+            mesh.triangles = new[] { 0, 1, 2, 0, 2, 1 };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void BuildPageLabel(GameObject parent, PartShelf shelf, Vector3 positionIn)
+        {
+            var go = new GameObject("PageLabel");
+            go.transform.SetParent(parent.transform, true);
+            go.transform.position = new Vector3(In(positionIn.x), In(positionIn.y), In(positionIn.z));
+
+            // Lie flat on the bench, reading toward the near edge.
+            go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+            var text = go.AddComponent<TMPro.TextMeshPro>();
+            text.text = "Page 1 / 1";
+            text.fontSize = 1.4f;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.color = new Color(0.92f, 0.93f, 0.95f);
+
+            var rect = go.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.sizeDelta = new Vector2(In(10f), In(2.5f));
             }
 
-            Debug.LogWarning(
-                $"[WorkshopSceneBuilder] No part definition matching '{idContains}'. " +
-                "The tray will be built empty. Convert a STEP file into " +
-                "Assets/Parts and run VexDesigner > Rebuild Part Library.");
-            return null;
+            shelf.AttachLabel(text);
         }
 
         private static Material CreateMaterial(

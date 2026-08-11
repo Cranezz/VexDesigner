@@ -1,0 +1,153 @@
+category,part_name,weight_grams
+1Competition,'High Stakes Field ',0.0
+1Competition,Block,0.0
+1Competition,Block,0.0
+1Competition,Center Goal,0.0
+1Competition,High Stakes Field,0.0
+1Competition,Loader,0.0
+1Competition,Long Goal,0.0
+1Competition,Push Back Field,0.0
+1Competition,Ring,125.0
+1Competition,Ring,125.0
+1Competition,Stake,950.0
+2Electronics,11W Motor,155.0
+2Electronics,5.5W Motor,90.7
+2Electronics,Battery,350.0
+2Electronics,Battery Clip,3.0
+2Electronics,Brain,285.0
+2Electronics,Cortex Bumper Switch,18.0
+2Electronics,Distance Sensor,9.0
+2Electronics,Inertial Sensor,9.0
+2Electronics,Light Sensor,33.0
+2Electronics,Limit Switch,13.6
+2Electronics,Line Tracker,12.0
+2Electronics,Optical Sensor,9.0
+2Electronics,Optical Shaft Encoder,30.0
+2Electronics,Potentiometer,11.0
+2Electronics,Radio,25.0
+2Electronics,Rotation Sensor,22.6
+2Electronics,Ultrasonic Range Finder,33.0
+2Electronics,V5 Bumper Switch,18.0
+2Electronics,Vision Sensor,46.0
+3Pneumatics,25mm Piston,42.0
+3Pneumatics,25mm Piston,42.0
+3Pneumatics,50mm Piston,47.0
+3Pneumatics,50mm Piston,47.0
+3Pneumatics,75mm Piston,54.0
+3Pneumatics,75mm Piston,54.0
+3Pneumatics,Legacy Pneumatic Air Reservoir,247.0
+3Pneumatics,V5 Pneumatic Air Reservoir,321.0
+4Motion,"1/16"" HS Spacer",0.04
+4Motion,"1/2"" HS Spacer",0.7
+4Motion,"1/2"" Nylon Spacer",2.4
+4Motion,"1/4"" HS Spacer",0.3
+4Motion,"1/4"" Nylon Spacer",1.2
+4Motion,"1/8"" HS Spacer",0.1
+4Motion,"1/8"" Nylon Spacer",0.6
+4Motion,16T Bevel Gear,2.0
+4Motion,"3/8"" Nylon Spacer",1.8
+4Motion,32T Bevel Gear,3.0
+4Motion,4.6mm Plastic Spacer,0.1
+4Motion,8mm Plastic Spacer,0.3
+4Motion,Bearing Flat,1.2
+4Motion,Block Bearing,1.4
+4Motion,Cam Follower,9.0
+4Motion,Drop Off Cam,19.0
+4Motion,HS Bearing Flat,2.0
+4Motion,HS Block Bearing,2.4
+4Motion,HS Clamping Shaft Collar,4.0
+4Motion,Hand Crank,3.0
+4Motion,Hex Nut Retainer,0.8
+4Motion,Hex Nut Retainer with Bearing Flat,1.0
+4Motion,Inner Slide Trunk,9.07
+4Motion,Lead Screw,0.0
+4Motion,Lead Screw,4.0
+4Motion,Lead Screw Bracket,10.0
+4Motion,Lead Screw Nut,6.0
+4Motion,Linear Slide Bracket,49.9
+4Motion,Low Profile Bearing Flat,1.0
+4Motion,Low Profile HS Clamping Shaft Collar,8.0
+4Motion,Metal Lock Bar,2.0
+4Motion,Normal Clamping Shaft Collar,4.0
+4Motion,Outer Slide Trunk,9.07
+4Motion,Plastic Lock Bar,1.0
+4Motion,Rack Gear v2,12.0
+4Motion,Rubber Bumper,5.0
+4Motion,Shaft Collar,3.7
+4Motion,Shaft Collar Retainer with Bearing Flat,1.0
+4Motion,Square Hex Nut Retainer,1.0
+4Motion,Steel Washer,0.5
+4Motion,Teflon Washer,0.28
+4Motion,Worm Gear,3.0
+4Motion,Worm Wheel,4.0
+5Structure,"1.00"" Screw",1.2
+5Structure,"1.00"" Standoff",1.9
+5Structure,"1.25"" Screw",1.4
+5Structure,"1.50"" Screw",1.6
+5Structure,"1.50"" Standoff",2.4
+5Structure,"1.75"" Screw",1.8
+5Structure,"1/2"" Screw",0.7
+5Structure,"1/2"" Standoff",1.5
+5Structure,"1/4"" Screw",0.5
+5Structure,"1/4"" Standoff",1.3
+5Structure,"2.00"" Screw",2.0
+5Structure,"2.00"" Standoff",2.6
+5Structure,"2.25"" Screw",2.2
+5Structure,"2.50"" Screw",2.4
+5Structure,"2.50"" Standoff",3.2
+5Structure,2x25 Rail,84.8
+5Structure,2x35 Rail,117.0
+5Structure,"3.00"" Standoff",3.4
+5Structure,"3/4"" Screw",0.9
+5Structure,"3/4"" Standoff",1.7
+5Structure,"3/8"" Screw",0.6
+5Structure,30 Degree Bent,4.54
+5Structure,30 Degree Flat,4.54
+5Structure,"4.00"" Standoff",3.8
+5Structure,45 Degree Bent,4.54
+5Structure,45 Degree Flat,4.54
+5Structure,45 Degree Plate,4.54
+5Structure,"5.00"" Standoff",4.3
+5Structure,"5/8"" Screw",0.8
+5Structure,"6.00"" Standoff",4.7
+5Structure,60 Degree Bent,4.54
+5Structure,60 Degree Flat,4.54
+5Structure,"7/8"" Screw",1.0
+5Structure,90 Degree Angle,4.54
+5Structure,90 Degree Bent,4.54
+5Structure,90 Degree Flat,4.54
+5Structure,90 Degree Plate,2.72
+5Structure,Angle Corner,14.51
+5Structure,Angle Coupler,7.26
+5Structure,Angle Pack,5.0
+5Structure,Base Plate,635.0
+5Structure,C-Channel Coupler,8.16
+5Structure,Hex Nut,1.5
+5Structure,Keps Nut,2.0
+5Structure,Low Profile Nut,0.8
+5Structure,Nylock Nut,2.0
+5Structure,Pivot Pack,5.0
+5Structure,Plus Pack,3.0
+Wheels,"1.625"" Flex Wheel",13.6
+Wheels,"1.625"" Flex Wheel with Adapter",24.6
+Wheels,"2"" Flex Wheel",18.1
+Wheels,"2"" Flex Wheel with Adapter",29.1
+Wheels,"2"" Omni Wheel",90.0
+Wheels,"2.75"" Omni Wheel",70.0
+Wheels,"2.75"" Omni Wheel",75.0
+Wheels,"2.75"" Traction Wheel",44.0
+Wheels,"2.75"" Traction Wheel",50.0
+Wheels,"3"" Flex Wheel",81.6
+Wheels,"3"" Flex Wheel with Adapter",139.6
+Wheels,"3.25"" Omni Wheel",55.0
+Wheels,"3.25"" Omni Wheel",60.0
+Wheels,"3.25"" Traction Wheel",30.0
+Wheels,"3.25"" Traction Wheel",58.0
+Wheels,"4"" Flex Wheel",127.0
+Wheels,"4"" Flex Wheel with Adapter",185.0
+Wheels,"4"" Omni Wheel",100.0
+Wheels,"4"" Omni Wheel",105.0
+Wheels,"4"" Traction Wheel",74.0
+Wheels,"4"" Traction Wheel",90.0
+Wheels,"5"" Traction Wheel",130.0
+Wheels,Mecanum Wheel,186.0
