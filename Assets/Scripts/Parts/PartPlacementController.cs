@@ -35,6 +35,16 @@ namespace VexDesigner.Parts
         [SerializeField] private bool invertRotateYaw = true;
         [SerializeField] private bool invertRotatePitch = true;
 
+        [Header("Carry physics")]
+        [Tooltip("How hard the part chases the aim point, per second. Higher " +
+                 "feels rigid, lower feels like carrying something heavy.")]
+        [SerializeField] private float followStrength = 16f;
+
+        [Tooltip("Speed cap, in metres per second. Without it a part that has " +
+                 "fallen behind the aim accelerates hard enough to punch " +
+                 "through whatever it hits.")]
+        [SerializeField] private float maxCarrySpeed = 6f;
+
         private IPointerInput pointer;
         private ILookInput look;
         private IActionInput actions;
@@ -210,23 +220,31 @@ namespace VexDesigner.Parts
             carryDistance = distance;
             grabLocalPoint = go.transform.InverseTransformPoint(grabWorldPoint);
 
-            // Physics off while carried: the part follows the aim, and a live
-            // Rigidbody fighting that produces jitter and stray collisions.
+            // A carried part stays a live physics body so it collides with the
+            // bench and with other parts. Teleporting it to the aim point
+            // instead would tunnel it straight through walls, since a
+            // transform assignment skips collision entirely.
+            //
+            // Gravity is off - the part hangs where it is put - but the body
+            // is otherwise fully simulated, and FixedUpdate steers it.
             carriedBody = go.GetComponent<Rigidbody>();
-            if (carriedBody != null && !CarriedIsFrozen)
+            if (carriedBody == null && definition != null)
             {
-                carriedBody.isKinematic = true;
+                PartFactory.AddPhysics(go, definition);
+                carriedBody = go.GetComponent<Rigidbody>();
+            }
+
+            if (carriedBody != null)
+            {
+                carriedBody.isKinematic = CarriedIsFrozen;
+                carriedBody.useGravity = false;
                 carriedBody.linearVelocity = Vector3.zero;
                 carriedBody.angularVelocity = Vector3.zero;
             }
 
-            // The carried collider must not block the aim ray, or the part
-            // would permanently obstruct whatever is behind it.
+            // The collider stays enabled so collision works; the aim ray skips
+            // the carried group instead. See RaycastFor.
             carriedCollider = go.GetComponent<Collider>();
-            if (carriedCollider != null)
-            {
-                carriedCollider.enabled = false;
-            }
 
             carriedInstance?.Group?.SetGrabbed(true);
 
@@ -265,8 +283,8 @@ namespace VexDesigner.Parts
             }
             else
             {
+                // Movement itself happens in FixedUpdate, with physics.
                 AdjustCarryDistance();
-                FollowAim();
             }
 
             if (pointer.PrimaryPressedThisFrame)
@@ -296,23 +314,44 @@ namespace VexDesigner.Parts
                 maxCarryDistance);
         }
 
-        private void FollowAim()
+        /// <summary>
+        /// Steers the carried body toward the aim point using velocity, run in
+        /// FixedUpdate alongside the rest of physics.
+        ///
+        /// A proportional controller rather than exact tracking. Setting the
+        /// velocity that would close the gap in a single step makes the part
+        /// effectively immovable, and it shoves anything it touches across the
+        /// room. Chasing at a bounded speed means the part is stopped by the
+        /// bench instead of driving through it, and lags slightly behind fast
+        /// movement, which reads as weight.
+        /// </summary>
+        private void FixedUpdate()
         {
+            if (!IsCarrying || carriedBody == null || CarriedIsFrozen)
+            {
+                return;
+            }
+
+            if (pointer == null || pointer.SecondaryHeld)
+            {
+                // Hold position while rotating.
+                carriedBody.linearVelocity = Vector3.zero;
+                return;
+            }
+
             Ray ray = pointer.AimRay;
             Vector3 target = ray.origin + (ray.direction * carryDistance);
 
-            // Move by the offset needed to bring the *grabbed point* to the
-            // target, so the part hangs off the cursor where it was picked up.
+            // Chase the grabbed point, not the object's origin, so the part
+            // hangs off the aim where it was picked up.
             Vector3 delta = target - GrabWorldPoint;
 
-            if (carriedInstance?.Group != null)
-            {
-                carriedInstance.Group.Translate(delta);
-            }
-            else
-            {
-                carried.transform.position += delta;
-            }
+            carriedBody.linearVelocity = Vector3.ClampMagnitude(
+                delta * followStrength, maxCarrySpeed);
+
+            // Collisions would otherwise set the part tumbling out of the
+            // user's control.
+            carriedBody.angularVelocity = Vector3.zero;
         }
 
         private void RotateCarried(Vector2 drag)
@@ -340,6 +379,14 @@ namespace VexDesigner.Parts
                 Transform t = carried.transform;
                 t.rotation = delta * t.rotation;
                 t.position = pivot + (delta * (t.position - pivot));
+            }
+
+            // Rotation is applied to the transform directly, which a live
+            // Rigidbody would otherwise fight on the next physics step.
+            if (carriedBody != null && !carriedBody.isKinematic)
+            {
+                carriedBody.linearVelocity = Vector3.zero;
+                carriedBody.angularVelocity = Vector3.zero;
             }
         }
 
@@ -376,14 +423,19 @@ namespace VexDesigner.Parts
         {
             bool frozen = CarriedIsFrozen;
 
-            if (carriedCollider != null)
-            {
-                carriedCollider.enabled = true;
-            }
-
             if (carriedBody != null)
             {
                 carriedBody.isKinematic = frozen;
+
+                // Gravity back on, unless the part is pinned. It was only ever
+                // off so the part would hang where it was put while carried.
+                carriedBody.useGravity = !frozen;
+
+                if (frozen)
+                {
+                    carriedBody.linearVelocity = Vector3.zero;
+                    carriedBody.angularVelocity = Vector3.zero;
+                }
             }
             else if (carriedDefinition != null)
             {
@@ -392,6 +444,7 @@ namespace VexDesigner.Parts
                 if (body != null)
                 {
                     body.isKinematic = frozen;
+                    body.useGravity = !frozen;
                 }
             }
 
@@ -456,6 +509,15 @@ namespace VexDesigner.Parts
                     continue;
                 }
 
+                // The carried part keeps its collider so it can collide with
+                // the world, so the aim ray has to ignore it explicitly -
+                // otherwise the thing in your hands permanently blocks the
+                // view of everything behind it.
+                if (IsCarriedCollider(hits[i].collider))
+                {
+                    continue;
+                }
+
                 var candidate = hits[i].collider.GetComponentInParent<T>();
                 if (candidate == null)
                 {
@@ -468,6 +530,25 @@ namespace VexDesigner.Parts
             }
 
             return best;
+        }
+
+        private bool IsCarriedCollider(Collider collider)
+        {
+            if (carried == null || collider == null)
+            {
+                return false;
+            }
+
+            var instance = collider.GetComponentInParent<PartInstance>();
+            if (instance == null)
+            {
+                return false;
+            }
+
+            // Compare by group, so an assembly held by one of its parts does
+            // not have the rest of itself blocking the aim.
+            return instance == carriedInstance ||
+                (carriedInstance != null && instance.Group == carriedInstance.Group);
         }
 
         /// <summary>
