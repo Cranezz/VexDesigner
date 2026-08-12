@@ -62,6 +62,13 @@ namespace VexDesigner.Parts
         private float rotateAccumulated;
         private LineRenderer rotationArc;
 
+        /// <summary>
+        /// Radial vector from the ring centre to the point that was grabbed.
+        /// The sweep arc starts here, so it grows from under the cursor rather
+        /// than from an arbitrary zero.
+        /// </summary>
+        private Vector3 rotateStartRadial;
+
         private bool relativeAxes;
 
         public bool IsActive { get; private set; }
@@ -214,6 +221,15 @@ namespace VexDesigner.Parts
                 }
 
                 body.isKinematic = kinematic;
+
+                // Interpolation off while the gizmo owns the part. It smooths
+                // the rendered transform between physics steps, which fights
+                // direct positioning and makes precise placement drift and
+                // stutter. Restored on deselect, where it is wanted again.
+                body.interpolation = kinematic
+                    ? RigidbodyInterpolation.None
+                    : RigidbodyInterpolation.Interpolate;
+
                 if (kinematic)
                 {
                     body.linearVelocity = Vector3.zero;
@@ -349,9 +365,11 @@ namespace VexDesigner.Parts
             if (radial.sqrMagnitude < 1e-8f)
             {
                 rotateScreenTangent = Vector2.right;
+                rotateStartRadial = Vector3.zero;
                 return;
             }
 
+            rotateStartRadial = radial.normalized;
             Vector3 tangent = Vector3.Cross(dragAxis, radial).normalized;
 
             Vector3 screenA = cam.WorldToScreenPoint(grabPoint);
@@ -390,6 +408,10 @@ namespace VexDesigner.Parts
                 // eye.
                 MeasurementDisplay.Show(dragStartCentre, selection.GetCentre());
             }
+            else if (dragging.HandleKind == TransformHandle.Kind.Free)
+            {
+                FreeRotate();
+            }
             else
             {
                 // Rotation reads the mouse directly rather than the aim ray,
@@ -406,40 +428,74 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
+        /// Trackball rotation: turns the part about whatever axis the drag
+        /// implies, relative to the viewer.
+        ///
+        /// Dragging sideways turns about the screen's vertical, dragging up and
+        /// down about the screen's horizontal - so the part follows the hand
+        /// the way a ball under a fingertip would. Faster than the rings for
+        /// getting a rough orientation, where choosing the right ring is more
+        /// work than the turn itself.
+        /// </summary>
+        private void FreeRotate()
+        {
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                return;
+            }
+
+            Vector2 drag = pointer.DragDelta * (0.35f * PrecisionFactor);
+            if (drag.sqrMagnitude < 1e-6f)
+            {
+                return;
+            }
+
+            Quaternion turn =
+                Quaternion.AngleAxis(drag.x, cam.transform.up) *
+                Quaternion.AngleAxis(-drag.y, cam.transform.right);
+
+            selection.Rotate(turn, dragOrigin);
+        }
+
+        /// <summary>
         /// Draws the swept angle as a bright arc on the ring being turned, so
         /// how far the part has come is visible without counting.
         /// </summary>
         private void DrawRotationArc()
         {
-            if (rotationArc == null || dragging == null)
+            if (rotationArc == null || dragging == null || rotateStartRadial == Vector3.zero)
             {
                 return;
             }
 
             float radius = gizmoRoot.transform.localScale.x * 0.75f;
-            float sweep = Mathf.Clamp(rotateAccumulated, -360f, 360f);
 
-            // One segment per two degrees, so a small turn is not drawn as a
-            // single straight chord.
-            int segments = Mathf.Max(2, Mathf.CeilToInt(Mathf.Abs(sweep) / 2f));
+            // Wrap at a full turn rather than clamping. Past 360 degrees a
+            // filled ring says nothing more, so it empties and begins again -
+            // which also reads as "you have gone all the way round".
+            float sweep = rotateAccumulated % 360f;
 
-            // Any vector perpendicular to the axis serves as the zero mark.
-            Vector3 reference = Vector3.Cross(dragAxis, Vector3.up);
-            if (reference.sqrMagnitude < 1e-6f)
-            {
-                reference = Vector3.Cross(dragAxis, Vector3.forward);
-            }
-            reference = reference.normalized * radius;
+            // Two degrees per segment keeps the curve smooth; a small turn
+            // still gets a handful of segments rather than one flat chord.
+            int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(sweep) / 2f), 2, 180);
+
+            // Grows from the point that was grabbed, so the arc appears under
+            // the cursor rather than starting somewhere unrelated.
+            Vector3 start = rotateStartRadial * radius;
 
             rotationArc.positionCount = segments + 1;
             for (int i = 0; i <= segments; i++)
             {
                 float t = i / (float)segments;
                 Quaternion turn = Quaternion.AngleAxis(sweep * t, dragAxis);
-                rotationArc.SetPosition(i, dragOrigin + (turn * reference));
+                rotationArc.SetPosition(i, dragOrigin + (turn * start));
             }
 
-            rotationArc.enabled = Mathf.Abs(sweep) > 0.5f;
+            // Track the gizmo's screen-constant size, or the arc is a hairline
+            // when close in and a slab when far away.
+            rotationArc.widthMultiplier = gizmoRoot.transform.localScale.x * 0.07f;
+            rotationArc.enabled = Mathf.Abs(sweep) > 1f;
         }
 
         private void EndDrag()
@@ -566,6 +622,7 @@ namespace VexDesigner.Parts
             CreateRotateHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateRotateHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
 
+            CreateFreeHandle();
             BuildRotationArc();
 
             gizmoRoot.SetActive(false);
@@ -630,6 +687,50 @@ namespace VexDesigner.Parts
 
             root.AddComponent<TransformHandle>()
                 .Configure(TransformHandle.Kind.Rotate, axis, colour);
+        }
+
+        /// <summary>
+        /// The free-rotation ball: a faint sphere filling the rings, dragged
+        /// to turn the part about any axis at once.
+        ///
+        /// Sized just inside the rings so it never steals a click meant for
+        /// one of them - the rings are the precise tool and must stay
+        /// reachable, with the ball as the coarse fallback in the middle.
+        /// </summary>
+        private void CreateFreeHandle()
+        {
+            const float radius = 0.68f;
+
+            var root = new GameObject("Rotate_Free");
+            root.transform.SetParent(rotateHandles, false);
+
+            var visual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            visual.name = "Ball";
+            visual.transform.SetParent(root.transform, false);
+
+            // Unity's sphere primitive is one unit across, so its radius is a
+            // half - hence the doubling.
+            visual.transform.localScale = Vector3.one * (radius * 2f);
+            Object.Destroy(visual.GetComponent<Collider>());
+
+            Shader shader = Shader.Find("VexDesigner/GizmoTransparent");
+            if (shader != null)
+            {
+                var mat = new Material(shader) { name = "GizmoBall" };
+                mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.10f));
+
+                var renderer = visual.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = mat;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
+            var collider = root.AddComponent<SphereCollider>();
+            collider.radius = radius;
+            collider.isTrigger = true;
+
+            root.AddComponent<TransformHandle>()
+                .Configure(TransformHandle.Kind.Free, Vector3.up, new Color(1f, 1f, 1f, 0.1f));
         }
 
         /// <summary>

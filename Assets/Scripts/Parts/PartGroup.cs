@@ -162,15 +162,32 @@ namespace VexDesigner.Parts
             }
         }
 
-        /// <summary>Moves every member by the same offset.</summary>
+        /// <summary>
+        /// Moves every member by the same offset.
+        ///
+        /// Writes through the Rigidbody where there is one. Setting
+        /// transform.position on an interpolated body does not stick: the
+        /// interpolator overwrites the rendered transform from the last two
+        /// physics positions every frame, so the part visibly refuses to move
+        /// while its transform is being set correctly - which is exactly how
+        /// the transform tool appeared to be doing nothing.
+        /// </summary>
         public void Translate(Vector3 delta)
         {
             foreach (PartInstance part in members)
             {
-                if (part != null)
+                if (part == null)
                 {
-                    part.transform.position += delta;
+                    continue;
                 }
+
+                var body = part.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.position += delta;
+                }
+
+                part.transform.position += delta;
             }
         }
 
@@ -187,6 +204,14 @@ namespace VexDesigner.Parts
                 Transform t = part.transform;
                 t.rotation = delta * t.rotation;
                 t.position = pivot + (delta * (t.position - pivot));
+
+                // Keep the body in step, for the same reason as Translate.
+                var body = part.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.position = t.position;
+                    body.rotation = t.rotation;
+                }
             }
         }
 

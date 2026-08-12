@@ -16,6 +16,13 @@ namespace VexDesigner.Parts
         {
             Move,
             Rotate,
+
+            /// <summary>
+            /// Trackball: rotation about whatever axis the drag implies, rather
+            /// than about one fixed axis. Faster for a rough orientation, where
+            /// picking the right ring first is more work than the turn itself.
+            /// </summary>
+            Free,
         }
 
         [SerializeField] private Kind handleKind;
@@ -72,8 +79,15 @@ namespace VexDesigner.Parts
             // the hover state brightens toward white rather than adding
             // emission. Deliberately unlit: a handle that dims with the room
             // lighting reads as an object in the scene rather than a control.
+            Color tint = on ? Color.Lerp(colour, Color.white, 0.6f) : colour;
+
+            // Alpha is preserved rather than lerped. The free-rotation ball is
+            // deliberately near-transparent, and brightening it toward opaque
+            // white on hover would hide the part it is wrapped around.
+            tint.a = on ? Mathf.Min(1f, colour.a * 2.2f) : colour.a;
+
             handleRenderer.GetPropertyBlock(block);
-            block.SetColor(BaseColorId, on ? Color.Lerp(colour, Color.white, 0.6f) : colour);
+            block.SetColor(BaseColorId, tint);
             handleRenderer.SetPropertyBlock(block);
         }
     }

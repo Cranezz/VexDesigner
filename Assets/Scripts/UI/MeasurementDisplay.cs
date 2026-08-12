@@ -99,38 +99,64 @@ namespace VexDesigner.UI
         private Vector3 ChooseLabelPoint(Vector3 from, Vector3 to)
         {
             Camera cam = Camera.main;
-            Vector3 midpoint = (from + to) * 0.5f;
-
-            if (cam == null || IsComfortablyVisible(cam, midpoint))
+            if (cam == null)
             {
-                return midpoint;
+                return (from + to) * 0.5f;
             }
 
-            // Walk back from the midpoint toward the start, which is where the
-            // user was looking when the drag began and so is most likely on
-            // screen. First point that is visible wins.
-            const int steps = 12;
-            for (int i = 1; i <= steps; i++)
-            {
-                float t = 0.5f * (1f - (i / (float)steps));
-                Vector3 candidate = Vector3.Lerp(from, to, t);
+            // Sample the whole line and score every point, rather than testing
+            // only the midpoint and giving up. A single test fails as soon as
+            // the midpoint leaves frame, which is exactly when the label most
+            // needs to move somewhere else.
+            const int samples = 32;
 
-                if (IsComfortablyVisible(cam, candidate))
+            float bestScore = float.MaxValue;
+            Vector3 bestPoint = (from + to) * 0.5f;
+            bool foundVisible = false;
+
+            for (int i = 0; i <= samples; i++)
+            {
+                float t = i / (float)samples;
+                Vector3 candidate = Vector3.Lerp(from, to, t);
+                Vector3 viewport = cam.WorldToViewportPoint(candidate);
+
+                if (viewport.z <= 0f)
                 {
-                    return candidate;
+                    continue;
+                }
+
+                bool visible =
+                    viewport.x > viewportMargin && viewport.x < 1f - viewportMargin &&
+                    viewport.y > viewportMargin && viewport.y < 1f - viewportMargin;
+
+                // Prefer points near the middle of the line, which reads as
+                // labelling the whole span, then near the centre of the screen.
+                float distanceFromMiddleOfLine = Mathf.Abs(t - 0.5f);
+                float distanceFromScreenCentre =
+                    Vector2.Distance(new Vector2(viewport.x, viewport.y), new Vector2(0.5f, 0.5f));
+
+                float score = distanceFromMiddleOfLine + (distanceFromScreenCentre * 0.5f);
+
+                // Any visible point beats any off-screen one, whatever the
+                // scores; the label being readable matters more than where
+                // along the line it sits.
+                if (visible)
+                {
+                    if (!foundVisible || score < bestScore)
+                    {
+                        foundVisible = true;
+                        bestScore = score;
+                        bestPoint = candidate;
+                    }
+                }
+                else if (!foundVisible && distanceFromScreenCentre < bestScore)
+                {
+                    bestScore = distanceFromScreenCentre;
+                    bestPoint = candidate;
                 }
             }
 
-            return from;
-        }
-
-        private bool IsComfortablyVisible(Camera cam, Vector3 worldPoint)
-        {
-            Vector3 viewport = cam.WorldToViewportPoint(worldPoint);
-
-            return viewport.z > 0f &&
-                   viewport.x > viewportMargin && viewport.x < 1f - viewportMargin &&
-                   viewport.y > viewportMargin && viewport.y < 1f - viewportMargin;
+            return bestPoint;
         }
 
         private void SetVisible(bool visible)

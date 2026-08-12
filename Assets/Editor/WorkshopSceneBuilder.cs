@@ -419,7 +419,7 @@ namespace VexDesigner.EditorTools
             if (overlay != null)
             {
                 var mat = new Material(overlay) { name = "MeasurementTrail" };
-                mat.SetColor("_BaseColor", new Color(1f, 0.85f, 0.3f));
+                mat.SetColor("_BaseColor", new Color(0.02f, 0.02f, 0.02f));
                 line.material = mat;
             }
 
@@ -428,17 +428,26 @@ namespace VexDesigner.EditorTools
 
             var text = labelGo.AddComponent<TMPro.TextMeshPro>();
             text.text = "0\"";
-            text.fontSize = 0.09f;
+            text.fontSize = 0.11f;
             text.alignment = TMPro.TextAlignmentOptions.Center;
-            text.color = new Color(1f, 0.93f, 0.6f);
+            text.color = Color.black;
             text.fontStyle = TMPro.FontStyles.Bold;
             text.enabled = false;
 
-            // Outlined so the number stays legible against the bench, the mat,
-            // and the concrete floor without needing a background panel.
+            // Black text with a white outline. Black alone disappears against
+            // the mat and into shadow; the outline is what keeps it readable
+            // over every surface in the workshop without a background panel.
             text.fontMaterial.EnableKeyword("OUTLINE_ON");
-            text.outlineColor = new Color32(0, 0, 0, 255);
-            text.outlineWidth = 0.25f;
+            text.outlineColor = new Color32(255, 255, 255, 255);
+            text.outlineWidth = 0.28f;
+
+            // Drawn over geometry, like the trail. A measurement hidden behind
+            // the bench is missing at precisely the moment it is being read.
+            if (text.fontMaterial.HasProperty("_ZTestMode"))
+            {
+                text.fontMaterial.SetFloat(
+                    "_ZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
+            }
 
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
@@ -703,7 +712,11 @@ namespace VexDesigner.EditorTools
         /// </summary>
         private static void VerifyShaders()
         {
-            var required = new[] { "VexDesigner/GizmoOverlay" };
+            var required = new[]
+            {
+                "VexDesigner/GizmoOverlay",
+                "VexDesigner/GizmoTransparent",
+            };
 
             foreach (string name in required)
             {

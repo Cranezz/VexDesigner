@@ -261,8 +261,12 @@ namespace VexDesigner.EditorTools
             ConfirmButton.Target target,
             string idleLabel, string confirmLabel, Color faceColour)
         {
-            const float widthIn = 30f;
-            const float heightIn = 13f;
+            // Large enough that the idle label reads across the room. The
+            // confirmation question is longer and auto-sizes down, so the
+            // button is sized for the text that has to be readable at a
+            // distance rather than for the longest string it ever shows.
+            const float widthIn = 40f;
+            const float heightIn = 18f;
 
             var mount = new GameObject($"Button_{target}");
             mount.transform.SetParent(parent.transform, false);
@@ -340,14 +344,17 @@ namespace VexDesigner.EditorTools
             // lets the long confirmation question shrink to fit while the short
             // idle label stays large.
             text.enableAutoSizing = true;
-            text.fontSizeMin = 0.03f;
-            text.fontSizeMax = 0.16f;
-            text.fontSize = 0.16f;
+            text.fontSizeMin = 0.07f;
+            text.fontSizeMax = 0.30f;
+            text.fontSize = 0.30f;
 
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(In(widthIn - 2f), In(heightIn - 2f));
+                // Only a small margin. A generous one looks tidy in isolation
+                // but forces the auto-sizer to shrink the text, which is the
+                // opposite of what a wall button needs.
+                rect.sizeDelta = new Vector2(In(widthIn - 1.5f), In(heightIn - 1.5f));
             }
 
             button.Bind(text, bar.transform);
