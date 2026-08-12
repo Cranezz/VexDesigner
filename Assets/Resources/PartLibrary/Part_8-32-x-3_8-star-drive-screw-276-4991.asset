@@ -15,6 +15,7 @@ MonoBehaviour:
   partId: 8-32-x-3_8-star-drive-screw-276-4991
   displayName: 8 32 x 3/8 star drive screw 276 4991
   mesh: {fileID: -2432090755550338912, guid: 04b29d1a62bd15444b4f730a466bbfea, type: 3}
+  material: 1
   massGrams: 0.6
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55

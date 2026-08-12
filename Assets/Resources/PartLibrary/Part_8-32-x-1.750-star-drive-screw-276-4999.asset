@@ -15,6 +15,7 @@ MonoBehaviour:
   partId: 8-32-x-1.750-star-drive-screw-276-4999
   displayName: 8 32 x 1.750 star drive screw 276 4999
   mesh: {fileID: -2432090755550338912, guid: ddf93f80fdf063e4dbc3a9b6359f38ca, type: 3}
+  material: 1
   massGrams: 1.8
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55

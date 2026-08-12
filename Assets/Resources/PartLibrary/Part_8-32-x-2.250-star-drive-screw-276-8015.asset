@@ -15,6 +15,7 @@ MonoBehaviour:
   partId: 8-32-x-2.250-star-drive-screw-276-8015
   displayName: 8 32 x 2.250 star drive screw 276 8015
   mesh: {fileID: -2432090755550338912, guid: b54a3806146bd7943aa99b40c8b76d12, type: 3}
+  material: 1
   massGrams: 2.2
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55

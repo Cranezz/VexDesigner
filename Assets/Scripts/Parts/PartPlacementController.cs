@@ -28,22 +28,30 @@ namespace VexDesigner.Parts
         [SerializeField] private float maxCarryDistance = 4f;
 
         [Tooltip("Fraction of the current distance moved per scroll notch.")]
-        [SerializeField] private float carryZoomFraction = 0.35f;
+        [SerializeField] private float carryZoomFraction = 0.14f;
+
+        [Tooltip("Multiplier applied to rotation and distance while the " +
+                 "precision modifier is held.")]
+        [SerializeField] private float precisionScale = 0.22f;
 
         [Header("Rotation")]
         [SerializeField] private float rotationDegreesPerPixel = 0.45f;
-        [SerializeField] private bool invertRotateYaw = true;
-        [SerializeField] private bool invertRotatePitch = true;
+        [SerializeField] private bool invertRotateYaw;
+        [SerializeField] private bool invertRotatePitch;
 
         [Header("Carry physics")]
         [Tooltip("How hard the part chases the aim point, per second. Higher " +
                  "feels rigid, lower feels like carrying something heavy.")]
-        [SerializeField] private float followStrength = 16f;
+        [SerializeField] private float followStrength = 30f;
 
-        [Tooltip("Speed cap, in metres per second. Without it a part that has " +
-                 "fallen behind the aim accelerates hard enough to punch " +
-                 "through whatever it hits.")]
-        [SerializeField] private float maxCarrySpeed = 6f;
+        [Tooltip("Speed cap, in metres per second.\n\n" +
+                 "This is the tunnelling control. A part that has fallen behind " +
+                 "the aim would otherwise accelerate without limit and cover " +
+                 "more than its own length per physics step, punching through " +
+                 "whatever it meets. Capped speed plus speculative contacts " +
+                 "plus a 100 Hz step is what keeps it on the right side of the " +
+                 "bench.")]
+        [SerializeField] private float maxCarrySpeed = 3.5f;
 
         private IPointerInput pointer;
         private ILookInput look;
@@ -263,9 +271,11 @@ namespace VexDesigner.Parts
         {
             bool rotating = pointer.SecondaryHeld;
 
-            // Claim the look gesture only while actually rotating, so the
-            // player can still look around and walk while holding something.
-            interactionLock.CameraOrbitLocked = rotating;
+            // Look is locked while rotating, and for the whole time a frozen
+            // part is held. A pinned part does not move, so letting the view
+            // swing away from it would only break the illusion of holding it -
+            // and would immediately lose sight of what is being rotated.
+            interactionLock.CameraOrbitLocked = rotating || CarriedIsFrozen;
 
             if (actions != null && actions.FreezePressed)
             {
@@ -307,9 +317,11 @@ namespace VexDesigner.Parts
                 return;
             }
 
+            float step = carryZoomFraction * PrecisionFactor;
+
             // Proportional, so a notch feels the same near or far.
             carryDistance = Mathf.Clamp(
-                carryDistance * (1f + (scroll * carryZoomFraction)),
+                carryDistance * (1f + (scroll * step)),
                 minCarryDistance,
                 maxCarryDistance);
         }
@@ -354,17 +366,26 @@ namespace VexDesigner.Parts
             carriedBody.angularVelocity = Vector3.zero;
         }
 
+        /// <summary>
+        /// 1 normally, smaller while the precision modifier is held. Assembling
+        /// needs both coarse positioning and fine nudges, and no single
+        /// sensitivity serves both.
+        /// </summary>
+        private float PrecisionFactor =>
+            (actions != null && actions.PrecisionHeld) ? precisionScale : 1f;
+
         private void RotateCarried(Vector2 drag)
         {
             float yawSign = invertRotateYaw ? -1f : 1f;
             float pitchSign = invertRotatePitch ? -1f : 1f;
+            float rate = rotationDegreesPerPixel * PrecisionFactor;
 
             Camera cam = Camera.main;
             Vector3 pitchAxis = cam != null ? cam.transform.right : Vector3.right;
 
             Quaternion delta =
-                Quaternion.AngleAxis(drag.x * rotationDegreesPerPixel * yawSign, Vector3.up) *
-                Quaternion.AngleAxis(drag.y * rotationDegreesPerPixel * pitchSign, pitchAxis);
+                Quaternion.AngleAxis(drag.x * rate * yawSign, Vector3.up) *
+                Quaternion.AngleAxis(drag.y * rate * pitchSign, pitchAxis);
 
             // Pivot on the grabbed point, so the part turns about where it is
             // held rather than swinging around a distant origin.

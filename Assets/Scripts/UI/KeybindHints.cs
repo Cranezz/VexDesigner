@@ -77,6 +77,7 @@ namespace VexDesigner.UI
                     Add("LMB", "Place");
                     Add("RMB", "Rotate");
                     Add("Scroll", "Distance");
+                    Add("Ctrl", "Precise");
                     Add("Alt", "Place repeatedly");
                     Add("K", "Freeze in air");
                 }

@@ -42,6 +42,7 @@ namespace VexDesigner.Parts
             // rather than only ever added to.
             go.AddComponent<Highlightable>();
             go.AddComponent<PickupHandle>();
+            go.AddComponent<PartImpactAudio>();
 
             var collider = go.AddComponent<MeshCollider>();
 
@@ -75,15 +76,34 @@ namespace VexDesigner.Parts
 
             body.mass = definition.MassKilograms;
 
-            // VEX parts are small and light. Continuous detection stops a
-            // dropped screw tunnelling through the tabletop between frames,
-            // which discrete detection will absolutely let happen at this
-            // scale.
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            // Speculative rather than ContinuousDynamic.
+            //
+            // ContinuousDynamic sweeps only against static geometry and other
+            // continuous bodies, and it ignores rotation entirely. Speculative
+            // contacts widen the collision check by the distance the body will
+            // travel this step, catching fast movement against everything -
+            // which is what stopped parts being shoved through the bench when
+            // dragged quickly.
+            //
+            // A 1/4 inch screw is about 6 mm across, so at any real speed it
+            // covers several times its own size per physics step. Without
+            // continuous detection of some kind it does not so much collide as
+            // teleport past.
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+
+            // Physics runs at a fixed rate that rarely matches the frame rate.
+            // Interpolation smooths the visual position between steps, which is
+            // most of what made a carried part look like it lagged the cursor.
+            body.interpolation = RigidbodyInterpolation.Interpolate;
 
             // Aluminium on a rubber mat does not slide far or bounce.
             body.linearDamping = 0.15f;
             body.angularDamping = 0.6f;
+
+            // Settle sooner. The default threshold leaves a stack of small
+            // light parts trembling almost indefinitely, because their
+            // residual energy never quite falls below it.
+            body.sleepThreshold = 0.012f;
         }
 
         /// <summary>

@@ -315,6 +315,11 @@ namespace VexDesigner.EditorTools
 
         private static void BuildPlayer()
         {
+            // Global physics settings, applied before anything spawns. Unity's
+            // defaults assume character-scale objects; VEX parts are one to two
+            // orders of magnitude smaller. See PhysicsTuning.
+            new GameObject("PhysicsTuning").AddComponent<PhysicsTuning>();
+
             var player = new GameObject("Player");
             player.transform.position = GarageRoomBuilder.PlayerSpawnPosition;
             player.transform.rotation = Quaternion.Euler(0f, GarageRoomBuilder.PlayerSpawnYaw, 0f);
@@ -448,10 +453,19 @@ namespace VexDesigner.EditorTools
             textRect.offsetMax = Vector2.zero;
 
             var text = textGo.AddComponent<TMPro.TextMeshProUGUI>();
-            text.fontSize = 26f;
+            text.fontSize = 28f;
             text.alignment = TMPro.TextAlignmentOptions.Center;
             text.raycastTarget = false;
             text.text = string.Empty;
+            text.fontStyle = TMPro.FontStyles.Bold;
+
+            // A black outline so the warning stays readable against the pale
+            // concrete floor as well as against dark shadow. Touching
+            // fontMaterial instances the material, which is what allows an
+            // outline here without affecting every other label in the scene.
+            text.fontMaterial.EnableKeyword("OUTLINE_ON");
+            text.outlineColor = new Color32(0, 0, 0, 255);
+            text.outlineWidth = 0.28f;
 
             var banner = go.AddComponent<MessageBanner>();
             var so = new SerializedObject(banner);

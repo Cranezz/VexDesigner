@@ -24,5 +24,15 @@ namespace VexDesigner.InputSources
 
         /// <summary>Held to swap the move tool for the rotate tool.</summary>
         bool RotateModifierHeld { get; }
+
+        /// <summary>
+        /// Held for fine control: slower rotation and smaller distance steps.
+        /// Assembling a robot needs both coarse positioning and thousandth-inch
+        /// nudges, and one sensitivity cannot serve both.
+        /// </summary>
+        bool PrecisionHeld { get; }
+
+        /// <summary>Jump.</summary>
+        bool JumpPressed { get; }
     }
 }

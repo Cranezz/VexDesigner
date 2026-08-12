@@ -49,6 +49,10 @@ namespace VexDesigner.Player
                  "and the player judders.")]
         [SerializeField] private float groundStick = -2f;
 
+        [Tooltip("Jump height in inches. Modest - this is a workshop, not a " +
+                 "platformer, and a big jump makes a 9 ft ceiling feel low.")]
+        [SerializeField] private float jumpHeightIn = 16f;
+
         [SerializeField] private Transform head;
 
         private CharacterController controller;
@@ -164,6 +168,16 @@ namespace VexDesigner.Player
             else
             {
                 verticalVelocity += gravity * Time.deltaTime;
+            }
+
+            if (MovementEnabled && controller.isGrounded &&
+                actions != null && actions.JumpPressed)
+            {
+                // v = sqrt(2gh) gives exactly the requested height, so tuning
+                // the jump is a matter of stating how high rather than guessing
+                // at an impulse.
+                float height = jumpHeightIn * InchesToMetres;
+                verticalVelocity = Mathf.Sqrt(2f * Mathf.Abs(gravity) * height);
             }
 
             Vector3 motion = (horizontal + (Vector3.up * verticalVelocity)) * Time.deltaTime;

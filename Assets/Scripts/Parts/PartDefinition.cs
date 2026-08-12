@@ -32,6 +32,11 @@ namespace VexDesigner.Parts
         public Mesh mesh;
 
         [Header("Physical")]
+        [Tooltip("What the part is made of. Drives impact sound: aluminium " +
+                 "structure and steel fasteners ring at noticeably different " +
+                 "pitches, and getting that wrong is immediately audible.")]
+        public PartMaterial material = PartMaterial.Aluminium;
+
         [Tooltip("Mass in grams. VEX publishes part weights; using real values " +
                  "means a built robot has a believable centre of mass rather " +
                  "than behaving like a balloon.")]

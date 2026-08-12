@@ -56,7 +56,9 @@ namespace VexDesigner.UI
         {
             if (instance != null)
             {
-                instance.Show(message, new Color(1f, 0.42f, 0.38f));
+                // Saturated, not pastel. A washed-out warning is easy to miss
+                // against a workshop full of mid-tone browns and greys.
+                instance.Show(message, new Color(1f, 0.13f, 0.10f));
             }
         }
 

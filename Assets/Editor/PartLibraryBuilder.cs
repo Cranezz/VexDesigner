@@ -136,6 +136,22 @@ namespace VexDesigner.EditorTools
             // pointing at the old one would silently use stale geometry.
             definition.mesh = mesh;
 
+            // Fasteners are steel, structure is aluminium. They ring at audibly
+            // different pitches, and a screw that sounds like a C-channel is
+            // wrong in a way people notice immediately.
+            //
+            // Applied whenever the field still holds its default, not only on
+            // creation. Definitions written before this field existed default
+            // to Aluminium, so a creation-only rule would have left every screw
+            // silently wrong. A value deliberately changed away from Aluminium
+            // is left alone.
+            if (isNew || definition.material == PartMaterial.Aluminium)
+            {
+                definition.material = LooksLikeFastener(key)
+                    ? PartMaterial.Steel
+                    : PartMaterial.Aluminium;
+            }
+
             bool weighed = TryApplyMass(definition, key);
 
             if (isNew)
@@ -212,6 +228,14 @@ namespace VexDesigner.EditorTools
             // Mesh units are metres. 1 m3 is 1e6 cm3.
             double cubicCentimetres = System.Math.Abs(volume) * 1e6;
             return (float)(cubicCentimetres * AluminiumDensity);
+        }
+
+        private static bool LooksLikeFastener(string key)
+        {
+            string lower = key.ToLowerInvariant();
+            return lower.Contains("screw") || lower.Contains("nut") ||
+                   lower.Contains("bolt") || lower.Contains("shaft") ||
+                   lower.Contains("axle") || lower.Contains("bearing");
         }
 
         private static string Prettify(string key)

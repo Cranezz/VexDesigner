@@ -65,6 +65,12 @@ namespace VexDesigner.InputSources
         /// <summary>Held to swap the move tool for the rotate tool.</summary>
         public bool RotateModifierHeld { get; private set; }
 
+        /// <summary>Held for fine control of rotation and carry distance.</summary>
+        public bool PrecisionHeld { get; private set; }
+
+        /// <summary>Jump.</summary>
+        public bool JumpPressed { get; private set; }
+
         private VexDesigner.Parts.InteractionLock interactionLock;
 
         private void Awake()
@@ -123,6 +129,8 @@ namespace VexDesigner.InputSources
                 ModeTogglePressed = false;
                 RelativeTogglePressed = false;
                 RotateModifierHeld = false;
+                PrecisionHeld = false;
+                JumpPressed = false;
                 return;
             }
 
@@ -131,6 +139,8 @@ namespace VexDesigner.InputSources
             ModeTogglePressed = keyboard.gKey.wasPressedThisFrame;
             RelativeTogglePressed = keyboard.yKey.wasPressedThisFrame;
             RotateModifierHeld = keyboard.rKey.isPressed;
+            PrecisionHeld = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
+            JumpPressed = keyboard.spaceKey.wasPressedThisFrame;
         }
 
         private void ReadLook(Mouse mouse)
