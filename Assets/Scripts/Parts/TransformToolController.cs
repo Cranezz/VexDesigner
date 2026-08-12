@@ -110,7 +110,16 @@ namespace VexDesigner.Parts
                 placement.SuppressInput = IsDragging || hovered != null;
             }
 
-            interactionLock.CameraOrbitLocked = IsDragging;
+            // The view is deliberately NOT locked during a drag.
+            //
+            // In first person the aim ray *is* the cursor: it comes from where
+            // the head is pointing. Locking the view froze the ray, so the drag
+            // recomputed the same position every frame and nothing moved - the
+            // gizmo appeared completely dead while also trapping the camera.
+            //
+            // Grabbing locks the view for the opposite reason: there the mouse
+            // is being used to rotate the part instead of to aim.
+            interactionLock.CameraOrbitLocked = false;
         }
 
         // ------------------------------------------------------------------
@@ -274,6 +283,12 @@ namespace VexDesigner.Parts
             dragging = handle;
             dragAxis = handle.WorldAxis;
             dragOrigin = gizmoRoot.transform.position;
+
+            // Deliberately positioning a part is a statement that it belongs
+            // there, so it is pinned. Otherwise gravity would undo the
+            // adjustment the moment the part was deselected, which is the
+            // opposite of what a precision tool is for.
+            selection?.SetFrozen(true);
 
             if (handle.HandleKind == TransformHandle.Kind.Move)
             {

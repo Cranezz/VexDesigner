@@ -14,9 +14,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
   partId: c-channel-1x2x1x35
   displayName: c channel 1x2x1x35
-  mesh: {fileID: -2432090755550338912, guid: f8ea9c9a1a7723043af3961cd136b94e, type: 3}
+  sizeDesignation: 
+  legacyIds: []
+  partClass: 0
+  subClass: 10
+  weightPounds: 0.15696913
   material: 0
-  massGrams: 75.70846
+  frictionOverride: -1
+  centreOfMassOverride: {x: 0, y: 0, z: 0}
+  mesh: {fileID: -2432090755550338912, guid: f8ea9c9a1a7723043af3961cd136b94e, type: 3}
+  cuttable: 0
+  hasHolePattern: 0
+  holePitchInches: 0.5
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85
+  notes: 

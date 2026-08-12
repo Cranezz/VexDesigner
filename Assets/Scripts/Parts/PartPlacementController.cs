@@ -45,7 +45,12 @@ namespace VexDesigner.Parts
                  "Rotation is driven through the physics solver so it collides, " +
                  "and an uncapped rate would let it spin through the bench " +
                  "between steps for the same reason fast movement used to.")]
-        [SerializeField] private float maxAngularSpeed = 540f;
+        [SerializeField] private float maxAngularSpeed = 1200f;
+
+        [Tooltip("How far ahead of the part its target orientation may get, in " +
+                 "degrees. Caps how much unfulfilled rotation can pile up from " +
+                 "a fast flick.")]
+        [SerializeField] private float maxTargetLead = 25f;
 
         [Header("Carry physics")]
         [Tooltip("How hard the part chases the aim point, per second. Higher " +
@@ -549,6 +554,22 @@ namespace VexDesigner.Parts
             // Only the *target* moves here. FixedUpdate drives the body toward
             // it through the solver, so the bench can refuse the rotation.
             targetRotation = delta * targetRotation;
+
+            // Keep the target within reach of where the part actually is.
+            //
+            // A fast flick asks for far more rotation than the capped angular
+            // speed can deliver, so the target runs away from the body. The
+            // gap then takes seconds to close, and any further input fights
+            // it - which is what read as stuttering rather than spinning.
+            Quaternion current = carriedBody != null
+                ? carriedBody.rotation
+                : carried.transform.rotation;
+
+            if (Quaternion.Angle(current, targetRotation) > maxTargetLead)
+            {
+                targetRotation = Quaternion.RotateTowards(
+                    current, targetRotation, maxTargetLead);
+            }
 
             // A frozen part is kinematic, so the solver will not steer it and
             // it has to be turned directly - which means checking the result

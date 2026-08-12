@@ -12,11 +12,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4ebab36757febfb40827258d9d0a0ca3, type: 3}
   m_Name: Part_8-32-x-5_8-star-drive-screw-276-4993
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
-  partId: 8-32-x-5_8-star-drive-screw-276-4993
+  partId: 276-4993
   displayName: 8 32 x 5/8 star drive screw 276 4993
-  mesh: {fileID: -2432090755550338912, guid: e2fe51a11298b41499f73945bb764df1, type: 3}
+  sizeDesignation: 
+  legacyIds:
+  - 8-32-x-5_8-star-drive-screw-276-4993
+  partClass: 0
+  subClass: 30
+  weightPounds: 0.0017636981
   material: 1
-  massGrams: 0.8
+  frictionOverride: -1
+  centreOfMassOverride: {x: 0, y: 0, z: 0}
+  mesh: {fileID: -2432090755550338912, guid: e2fe51a11298b41499f73945bb764df1, type: 3}
+  cuttable: 0
+  hasHolePattern: 0
+  holePitchInches: 0.5
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85
+  notes: 

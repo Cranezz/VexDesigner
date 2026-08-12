@@ -307,12 +307,18 @@ namespace VexDesigner.EditorTools
             text.color = Color.white;
 
             // Sized in the anchor's local space, which is one unit across the
-            // whole button face.
-            text.fontSize = 0.13f;
+            // whole button face. Auto-sizing lets a long confirmation question
+            // shrink to fit while the short idle label stays large, rather than
+            // every state being limited by the longest one.
+            text.enableAutoSizing = true;
+            text.fontSizeMin = 0.05f;
+            text.fontSizeMax = 0.30f;
+            text.fontSize = 0.30f;
+
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(0.92f, 0.85f);
+                rect.sizeDelta = new Vector2(0.94f, 0.88f);
             }
 
             button.Bind(text, barGo.transform);

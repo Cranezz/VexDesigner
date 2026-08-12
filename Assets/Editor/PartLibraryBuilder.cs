@@ -53,6 +53,12 @@ namespace VexDesigner.EditorTools
 
                 // Structure.
                 { "276-2289", 71.2f },  // 1x2x1x35 C-channel, 0.157 lb
+
+                // Keyed by file name rather than SKU, for the one part that
+                // was hand-renamed before the importer existed and so carries
+                // no SKU in its name. Anything imported through the inbox
+                // keeps its SKU and matches above.
+                { "c-channel-1x2x1x35", 71.2f },
             };
 
         [MenuItem("VexDesigner/Rebuild Part Library")]
@@ -127,8 +133,31 @@ namespace VexDesigner.EditorTools
             if (isNew)
             {
                 definition = ScriptableObject.CreateInstance<PartDefinition>();
-                definition.partId = key;
                 definition.displayName = Prettify(key);
+            }
+
+            // Prefer the VEX SKU as the part's identity. It is shorter, stable
+            // across renames, and is what a person would look the part up by.
+            //
+            // The previous ID is kept in legacyIds rather than discarded, so a
+            // save file written before the change can still be loaded. That is
+            // the entire reason that field exists.
+            string sku = ExtractSku(key);
+            string preferredId = string.IsNullOrEmpty(sku) ? key : sku;
+
+            if (definition.partId != preferredId)
+            {
+                if (!string.IsNullOrEmpty(definition.partId))
+                {
+                    var legacy = new List<string>(definition.legacyIds);
+                    if (!legacy.Contains(definition.partId))
+                    {
+                        legacy.Add(definition.partId);
+                        definition.legacyIds = legacy.ToArray();
+                    }
+                }
+
+                definition.partId = preferredId;
             }
 
             // The mesh reference is always refreshed: re-exporting a part at a
@@ -136,21 +165,11 @@ namespace VexDesigner.EditorTools
             // pointing at the old one would silently use stale geometry.
             definition.mesh = mesh;
 
-            // Fasteners are steel, structure is aluminium. They ring at audibly
-            // different pitches, and a screw that sounds like a C-channel is
-            // wrong in a way people notice immediately.
-            //
-            // Applied whenever the field still holds its default, not only on
-            // creation. Definitions written before this field existed default
-            // to Aluminium, so a creation-only rule would have left every screw
-            // silently wrong. A value deliberately changed away from Aluminium
-            // is left alone.
-            if (isNew || definition.material == PartMaterial.Aluminium)
-            {
-                definition.material = LooksLikeFastener(key)
-                    ? PartMaterial.Steel
-                    : PartMaterial.Aluminium;
-            }
+            // Classification is guessed from the file name, and only while the
+            // field still holds its default. These are starting points meant to
+            // be corrected by hand in the Inspector, so a deliberate change
+            // must never be overwritten by a rebuild.
+            Classify(definition, key, isNew);
 
             bool weighed = TryApplyMass(definition, key);
 
@@ -166,7 +185,9 @@ namespace VexDesigner.EditorTools
             Debug.Log(
                 $"[PartLibrary] {definition.displayName}: " +
                 $"{definition.LongestDimensionInches:F3} in long, " +
-                $"{definition.massGrams:F2} g{(weighed ? "" : "  (placeholder)")}");
+                $"{definition.weightPounds:F5} lb ({definition.MassGrams:F2} g)" +
+                $"{(weighed ? "" : "  (estimated)")}, " +
+                $"{definition.partClass}/{definition.subClass}");
 
             return weighed;
         }
@@ -174,13 +195,18 @@ namespace VexDesigner.EditorTools
         /// <summary>Density of 6061 aluminium, grams per cubic centimetre.</summary>
         private const float AluminiumDensity = 2.70f;
 
+        private const float GramsToPounds = 1f / 453.59237f;
+
         private static bool TryApplyMass(PartDefinition definition, string key)
         {
+            // The source table is in grams because that is how the measurements
+            // were taken; definitions store pounds because that is what VEX
+            // publishes. Converting here keeps both honest to their origin.
             foreach (KeyValuePair<string, float> entry in MassGramsBySku)
             {
                 if (key.Contains(entry.Key))
                 {
-                    definition.massGrams = entry.Value;
+                    definition.weightPounds = entry.Value * GramsToPounds;
                     return true;
                 }
             }
@@ -194,7 +220,7 @@ namespace VexDesigner.EditorTools
             float grams = EstimateMassGrams(definition.mesh);
             if (grams > 0f)
             {
-                definition.massGrams = grams;
+                definition.weightPounds = grams * GramsToPounds;
             }
 
             return false;
@@ -230,12 +256,140 @@ namespace VexDesigner.EditorTools
             return (float)(cubicCentimetres * AluminiumDensity);
         }
 
-        private static bool LooksLikeFastener(string key)
+        /// <summary>
+        /// Guesses class, sub-class, material and geometry flags from the part
+        /// name. Only fills fields still holding their default, so anything
+        /// corrected by hand survives every subsequent rebuild.
+        /// </summary>
+        private static void Classify(PartDefinition definition, string key, bool isNew)
         {
-            string lower = key.ToLowerInvariant();
-            return lower.Contains("screw") || lower.Contains("nut") ||
-                   lower.Contains("bolt") || lower.Contains("shaft") ||
-                   lower.Contains("axle") || lower.Contains("bearing");
+            string name = key.ToLowerInvariant();
+
+            PartSubClass sub = GuessSubClass(name);
+
+            if (isNew || definition.subClass == PartSubClass.Unknown)
+            {
+                definition.subClass = sub;
+                definition.partClass = ClassFor(sub);
+            }
+
+            if (isNew || definition.material == PartMaterial.Aluminium)
+            {
+                // Fasteners and shafts are steel; structure is aluminium. They
+                // ring at audibly different pitches, and a screw that sounds
+                // like a C-channel is noticed immediately.
+                definition.material = IsSteel(definition.subClass)
+                    ? PartMaterial.Steel
+                    : PartMaterial.Aluminium;
+            }
+
+            if (isNew)
+            {
+                // Only structural extrusion goes on the saw, and only structure
+                // carries the hole grid. Getting these wrong wastes hole
+                // detection on wheels and offers to cut screws in half.
+                definition.cuttable = IsCuttable(definition.subClass);
+                definition.hasHolePattern = HasHoles(definition.subClass);
+                definition.sizeDesignation = ExtractSizeDesignation(key);
+            }
+        }
+
+        private static PartSubClass GuessSubClass(string name)
+        {
+            if (name.Contains("c-channel") || name.Contains("cchannel")) { return PartSubClass.CChannel; }
+            if (name.Contains("standoff")) { return PartSubClass.Standoff; }
+            if (name.Contains("screw") || name.Contains("bolt")) { return PartSubClass.Screw; }
+            if (name.Contains("nut")) { return PartSubClass.Nut; }
+            if (name.Contains("spacer")) { return PartSubClass.Spacer; }
+            if (name.Contains("bearing")) { return PartSubClass.Bearing; }
+            if (name.Contains("sprocket")) { return PartSubClass.Sprocket; }
+            if (name.Contains("gear")) { return PartSubClass.Gear; }
+            if (name.Contains("wheel")) { return PartSubClass.Wheel; }
+            if (name.Contains("shaft") || name.Contains("axle")) { return PartSubClass.Shaft; }
+            if (name.Contains("motor")) { return PartSubClass.Motor; }
+            if (name.Contains("sensor")) { return PartSubClass.Sensor; }
+            if (name.Contains("brain")) { return PartSubClass.Brain; }
+            if (name.Contains("battery")) { return PartSubClass.Battery; }
+            if (name.Contains("cylinder") || name.Contains("piston")) { return PartSubClass.Cylinder; }
+            if (name.Contains("bracket")) { return PartSubClass.Bracket; }
+            if (name.Contains("angle")) { return PartSubClass.Angle; }
+            if (name.Contains("plate")) { return PartSubClass.Plate; }
+            if (name.Contains("bar")) { return PartSubClass.Bar; }
+            return PartSubClass.Unknown;
+        }
+
+        private static PartClass ClassFor(PartSubClass sub)
+        {
+            switch (sub)
+            {
+                case PartSubClass.Shaft:
+                case PartSubClass.Gear:
+                case PartSubClass.Sprocket:
+                case PartSubClass.Chain:
+                case PartSubClass.Bearing:
+                case PartSubClass.Wheel:
+                case PartSubClass.Pulley:
+                    return PartClass.Motion;
+
+                case PartSubClass.Motor:
+                case PartSubClass.Brain:
+                case PartSubClass.Sensor:
+                case PartSubClass.Battery:
+                    return PartClass.Electronics;
+
+                case PartSubClass.Cylinder:
+                case PartSubClass.Reservoir:
+                case PartSubClass.Valve:
+                case PartSubClass.Tubing:
+                    return PartClass.Pneumatics;
+
+                default:
+                    return PartClass.Structure;
+            }
+        }
+
+        private static bool IsSteel(PartSubClass sub)
+        {
+            return sub == PartSubClass.Screw || sub == PartSubClass.Nut ||
+                   sub == PartSubClass.Shaft || sub == PartSubClass.Bearing ||
+                   sub == PartSubClass.Rivet;
+        }
+
+        private static bool IsCuttable(PartSubClass sub)
+        {
+            return sub == PartSubClass.CChannel || sub == PartSubClass.Angle ||
+                   sub == PartSubClass.Bar || sub == PartSubClass.Plate;
+        }
+
+        private static bool HasHoles(PartSubClass sub)
+        {
+            return IsCuttable(sub) || sub == PartSubClass.Bracket;
+        }
+
+        /// <summary>
+        /// Pulls a size like "1x2x1x35" out of a file name, for the parts list.
+        /// </summary>
+        private static string ExtractSizeDesignation(string key)
+        {
+            foreach (string token in key.Split('-', ' ', '_'))
+            {
+                if (token.Contains("x") && token.IndexOfAny("0123456789".ToCharArray()) >= 0)
+                {
+                    return token;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// Pulls a VEX SKU (three digits, hyphen, four digits) out of a file
+        /// name. Returns empty if there is none.
+        /// </summary>
+        private static string ExtractSku(string key)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(key, @"\d{3}-\d{4}");
+            return match.Success ? match.Value : string.Empty;
         }
 
         private static string Prettify(string key)

@@ -104,6 +104,74 @@ namespace VexDesigner.Parts
             // light parts trembling almost indefinitely, because their
             // residual energy never quite falls below it.
             body.sleepThreshold = 0.012f;
+
+            // Only override when the definition says to. Physics derives a
+            // sensible centre of mass from the collider, which is right for
+            // almost every VEX part; the override exists for things with
+            // concentrated mass, such as a motor.
+            if (definition.centreOfMassOverride != Vector3.zero)
+            {
+                body.centerOfMass = definition.centreOfMassOverride;
+            }
+
+            ApplyFriction(go, definition);
+        }
+
+        private static readonly Dictionary<PartMaterial, PhysicsMaterial> FrictionCache =
+            new Dictionary<PartMaterial, PhysicsMaterial>();
+
+        /// <summary>
+        /// Gives the part surface grip appropriate to what it is made of.
+        ///
+        /// Matters more than it looks: a pile of aluminium on a rubber mat
+        /// stays where it is put, whereas everything sharing one default
+        /// friction makes parts slide off the bench for no visible reason.
+        /// </summary>
+        private static void ApplyFriction(GameObject go, PartDefinition definition)
+        {
+            var collider = go.GetComponent<Collider>();
+            if (collider == null)
+            {
+                return;
+            }
+
+            if (definition.frictionOverride >= 0f)
+            {
+                collider.material = new PhysicsMaterial($"{definition.partId} friction")
+                {
+                    dynamicFriction = definition.frictionOverride,
+                    staticFriction = definition.frictionOverride,
+                    bounciness = 0f,
+                };
+
+                return;
+            }
+
+            if (!FrictionCache.TryGetValue(definition.material, out PhysicsMaterial shared)
+                || shared == null)
+            {
+                float friction = definition.material switch
+                {
+                    PartMaterial.Rubber => 1.0f,
+                    PartMaterial.Plastic => 0.45f,
+                    PartMaterial.Steel => 0.35f,
+                    _ => 0.42f,   // aluminium
+                };
+
+                shared = new PhysicsMaterial(definition.material.ToString())
+                {
+                    dynamicFriction = friction,
+                    staticFriction = friction * 1.15f,
+
+                    // VEX parts do not bounce. Any bounce at this scale reads
+                    // as parts being made of something springy.
+                    bounciness = 0f,
+                };
+
+                FrictionCache[definition.material] = shared;
+            }
+
+            collider.material = shared;
         }
 
         /// <summary>
