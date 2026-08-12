@@ -23,6 +23,15 @@ namespace VexDesigner.InputSources
         bool PrimaryPressedThisFrame { get; }
 
         /// <summary>
+        /// True for as long as the primary action is held.
+        ///
+        /// Distinct from the press edge because the two suit different jobs:
+        /// picking a part up is a moment, but dragging a gizmo axis is a
+        /// continuous gesture that should end when the button comes up.
+        /// </summary>
+        bool PrimaryHeld { get; }
+
+        /// <summary>
         /// True while the "keep going" modifier is held - Alt on desktop.
         /// Used to place several parts in a row without returning to the tray.
         /// </summary>

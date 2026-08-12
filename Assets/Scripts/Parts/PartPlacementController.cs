@@ -464,7 +464,7 @@ namespace VexDesigner.Parts
             }
 
             DriveRotation();
-            DriveposIfNotRotating();
+            DrivePosition();
         }
 
         /// <summary>
@@ -503,15 +503,17 @@ namespace VexDesigner.Parts
                 axis.normalized * (degreesPerSecond * Mathf.Deg2Rad);
         }
 
-        private void DriveposIfNotRotating()
+        /// <summary>
+        /// Steers the grabbed point back to the aim point, every frame,
+        /// including while rotating.
+        ///
+        /// Position used to be frozen during rotation, which meant a part that
+        /// caught the bench mid-turn was pushed aside and simply stayed there,
+        /// detached from the cursor. Driving position continuously lets it
+        /// settle back under the aim once it is clear.
+        /// </summary>
+        private void DrivePosition()
         {
-            if (pointer.SecondaryHeld)
-            {
-                // Hold position while rotating, so the part turns in place.
-                carriedBody.linearVelocity = Vector3.zero;
-                return;
-            }
-
             Ray ray = pointer.AimRay;
             Vector3 target = ray.origin + (ray.direction * carryDistance);
 

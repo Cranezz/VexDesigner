@@ -35,6 +35,7 @@ namespace VexDesigner.InputSources
 
         public Ray AimRay { get; private set; }
         public bool PrimaryPressedThisFrame { get; private set; }
+        public bool PrimaryHeld { get; private set; }
         public bool SecondaryHeld { get; private set; }
         public bool RepeatModifierHeld { get; private set; }
         public bool IsOverInterface { get; private set; }
@@ -201,6 +202,7 @@ namespace VexDesigner.InputSources
             if (cam == null)
             {
                 PrimaryPressedThisFrame = false;
+                PrimaryHeld = false;
                 SecondaryHeld = false;
                 return;
             }
@@ -212,6 +214,7 @@ namespace VexDesigner.InputSources
             if (mouse != null)
             {
                 PrimaryPressedThisFrame = mouse.leftButton.wasPressedThisFrame && CursorLocked;
+                PrimaryHeld = mouse.leftButton.isPressed && CursorLocked;
                 SecondaryHeld = mouse.rightButton.isPressed && CursorLocked;
                 DragDelta = mouse.delta.ReadValue();
             }

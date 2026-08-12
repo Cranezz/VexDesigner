@@ -417,6 +417,7 @@ namespace VexDesigner.EditorTools
 
             BuildKeybindHints(canvasGo.transform);
             BuildMessageBanner(canvasGo.transform);
+            BuildDeletionPreview(canvasGo.transform);
 
             var crosshair = canvasGo.AddComponent<Crosshair>();
             var so = new SerializedObject(crosshair);
@@ -433,6 +434,77 @@ namespace VexDesigner.EditorTools
                 events.AddComponent<UnityEngine.EventSystems.EventSystem>();
                 events.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
             }
+        }
+
+        /// <summary>
+        /// Corner viewport showing the parts a destructive button will remove.
+        ///
+        /// Rendered by a second camera into a RenderTexture. Moving the
+        /// player's own view instead would be disorienting and would lose their
+        /// place in the workshop.
+        /// </summary>
+        private static void BuildDeletionPreview(Transform parent)
+        {
+            // Saved as an asset, not created in memory. A RenderTexture made at
+            // build time and referenced by a saved scene would be a dangling
+            // reference the moment the editor reloads.
+            const string texturePath = TexturesFolder + "/DeletionPreviewRT.renderTexture";
+            var texture = AssetDatabase.LoadAssetAtPath<RenderTexture>(texturePath);
+
+            if (texture == null)
+            {
+                texture = new RenderTexture(480, 320, 24) { name = "DeletionPreviewRT" };
+                AssetDatabase.CreateAsset(texture, texturePath);
+            }
+
+            var camGo = new GameObject("PreviewCamera");
+            Camera cam = camGo.AddComponent<Camera>();
+            cam.targetTexture = texture;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.05f, 0.05f, 0.06f);
+            cam.fieldOfView = 45f;
+            cam.enabled = false;
+
+            // Depth below the player's camera so it can never take over the
+            // main view if it is accidentally left enabled.
+            cam.depth = -10;
+
+            var frameGo = new GameObject("PreviewFrame", typeof(RectTransform), typeof(Image));
+            frameGo.transform.SetParent(parent, false);
+
+            var frameRect = frameGo.GetComponent<RectTransform>();
+            frameRect.anchorMin = new Vector2(1f, 1f);
+            frameRect.anchorMax = new Vector2(1f, 1f);
+            frameRect.pivot = new Vector2(1f, 1f);
+            frameRect.anchoredPosition = new Vector2(-28f, -28f);
+            frameRect.sizeDelta = new Vector2(384f, 256f);
+
+            var frameImage = frameGo.GetComponent<Image>();
+            frameImage.color = new Color(0f, 0f, 0f, 0.85f);
+            frameImage.raycastTarget = false;
+
+            var displayGo = new GameObject("PreviewImage", typeof(RectTransform), typeof(RawImage));
+            displayGo.transform.SetParent(frameGo.transform, false);
+
+            var displayRect = displayGo.GetComponent<RectTransform>();
+            displayRect.anchorMin = Vector2.zero;
+            displayRect.anchorMax = Vector2.one;
+            displayRect.offsetMin = new Vector2(4f, 4f);
+            displayRect.offsetMax = new Vector2(-4f, -4f);
+
+            var raw = displayGo.GetComponent<RawImage>();
+            raw.texture = texture;
+            raw.raycastTarget = false;
+
+            // Lives on the canvas, not on the frame it controls. A component on
+            // a disabled object never runs Awake, so it would never register
+            // itself and every call to show it would silently do nothing.
+            var preview = parent.gameObject.AddComponent<DeletionPreview>();
+            var so = new SerializedObject(preview);
+            so.FindProperty("previewCamera").objectReferenceValue = cam;
+            so.FindProperty("display").objectReferenceValue = raw;
+            so.FindProperty("frame").objectReferenceValue = frameRect;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void BuildMessageBanner(Transform parent)

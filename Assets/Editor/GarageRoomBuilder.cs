@@ -216,44 +216,106 @@ namespace VexDesigner.EditorTools
             }
 
             BuildPegboard(bench, z);
-            BuildClearButton(bench);
+            BuildWallButtons(bench);
         }
 
         /// <summary>
-        /// Wall button beside the tool board that sweeps parts off the floor.
+        /// The two destructive buttons, beside the tool board.
         ///
-        /// Placed on the wall rather than in a menu because it is a workshop
-        /// action, and because a physical control can be reached by hand in VR
-        /// later without being redesigned as a UI panel.
+        /// Physical controls on the wall rather than menu entries: they are
+        /// workshop actions, and a control that exists in the room can be
+        /// reached by hand in VR later without being redesigned as a panel.
         /// </summary>
-        private static void BuildClearButton(GameObject parent)
+        private static void BuildWallButtons(GameObject parent)
         {
             float z = (RoomDepthIn * 0.5f) - 3.2f;
-            const float x = 58f;
-            const float y = BenchHeightIn + 22f;
+            const float x = 62f;
 
-            var mount = new GameObject("ClearPartsButton");
+            BuildConfirmButton(parent, new Vector3(x, BenchHeightIn + 34f, z),
+                ConfirmButton.Target.FloorParts,
+                "CLEAR FLOOR",
+                "Delete parts on the floor?",
+                new Color(0.85f, 0.62f, 0.15f));
+
+            // Red, larger consequence, placed lower so it is not the one
+            // reached for by habit.
+            BuildConfirmButton(parent, new Vector3(x, BenchHeightIn + 18f, z),
+                ConfirmButton.Target.AllParts,
+                "DELETE ALL",
+                "Delete EVERY part?",
+                new Color(0.72f, 0.12f, 0.10f));
+        }
+
+        private static void BuildConfirmButton(
+            GameObject parent, Vector3 positionIn, ConfirmButton.Target target,
+            string idleLabel, string confirmLabel, Color faceColour)
+        {
+            const float widthIn = 26f;
+            const float heightIn = 11f;
+
+            var mount = new GameObject($"Button_{target}");
             mount.transform.SetParent(parent.transform, false);
 
-            Box(mount, "Plate",
-                new Vector3(x, y, z),
-                new Vector3(9f, 9f, 1.2f),
-                WorkshopMaterials.Steel, 9f, 9f);
+            GameObject plate = Box(mount, "Plate", positionIn,
+                new Vector3(widthIn + 2f, heightIn + 2f, 1.2f),
+                WorkshopMaterials.Steel, widthIn, heightIn);
 
-            // The button proper: proud of the plate, and the only part with a
-            // collider, so aiming at it is unambiguous.
-            GameObject button = Box(mount, "Button",
-                new Vector3(x, y, z - 1.4f),
-                new Vector3(5.5f, 5.5f, 2.2f),
-                WorkshopMaterials.CabinetBlue, 5.5f, 5.5f);
+            // Frame is decoration; leaving its collider live would let the user
+            // aim at the surround and wonder why nothing happened.
+            plate.GetComponent<Collider>().enabled = false;
 
-            button.isStatic = false;
-            button.AddComponent<Highlightable>();
-            button.AddComponent<ClearDroppedPartsButton>();
+            GameObject face = Box(mount, "Button",
+                positionIn + new Vector3(0f, 0f, -1.3f),
+                new Vector3(widthIn, heightIn, 2.2f),
+                WorkshopMaterials.Steel, widthIn, heightIn);
 
-            // Plate is decoration only; leaving its collider live would let the
-            // user aim at the frame and wonder why nothing happened.
-            mount.transform.Find("Plate").GetComponent<Collider>().enabled = false;
+            face.isStatic = false;
+            face.GetComponent<MeshRenderer>().sharedMaterial =
+                WorkshopMaterials.CreateButtonFace(target.ToString(), faceColour);
+
+            face.AddComponent<Highlightable>();
+            var button = face.AddComponent<ConfirmButton>();
+            button.Configure(target, idleLabel, confirmLabel);
+
+            // Everything on the face lives in a unit-sized anchor, so the grey
+            // bar can be scaled in 0..1 without knowing the button's size.
+            var anchor = new GameObject("Face");
+            anchor.transform.SetParent(mount.transform, false);
+            anchor.transform.position = new Vector3(
+                In(positionIn.x), In(positionIn.y), In(positionIn.z - 2.5f));
+            anchor.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            anchor.transform.localScale =
+                new Vector3(In(widthIn), In(heightIn), 1f);
+
+            var barGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            barGo.name = "GreyBar";
+            barGo.transform.SetParent(anchor.transform, false);
+            barGo.transform.localPosition = new Vector3(0f, 0f, -0.001f);
+            barGo.transform.localScale = Vector3.one;
+            Object.DestroyImmediate(barGo.GetComponent<Collider>());
+            barGo.GetComponent<MeshRenderer>().sharedMaterial =
+                WorkshopMaterials.CreateButtonFace("Grey", new Color(0.12f, 0.12f, 0.13f));
+
+            var labelGo = new GameObject("Label");
+            labelGo.transform.SetParent(anchor.transform, false);
+            labelGo.transform.localPosition = new Vector3(0f, 0f, -0.002f);
+
+            var text = labelGo.AddComponent<TMPro.TextMeshPro>();
+            text.text = idleLabel;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.enableWordWrapping = true;
+            text.color = Color.white;
+
+            // Sized in the anchor's local space, which is one unit across the
+            // whole button face.
+            text.fontSize = 0.13f;
+            var rect = labelGo.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.sizeDelta = new Vector2(0.92f, 0.85f);
+            }
+
+            button.Bind(text, barGo.transform);
         }
 
         private static void BuildPegboard(GameObject parent, float benchZ)

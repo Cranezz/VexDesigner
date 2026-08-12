@@ -161,6 +161,25 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
+        /// Flat coloured face for a wall button. Slightly emissive so the
+        /// label stays readable in the shadow the pegboard casts, without
+        /// relying on a light happening to reach that corner.
+        /// </summary>
+        public static Material CreateButtonFace(string name, Color colour)
+        {
+            Material mat = CreateOrLoad($"Button_{name}");
+            ApplyCommon(mat, colour, roughness: 0.55f, metallic: 0f);
+
+            if (mat.HasProperty("_EmissionColor"))
+            {
+                mat.SetColor("_EmissionColor", colour * 0.35f);
+            }
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        /// <summary>
         /// Emissive material for the fluorescent tubes. Separate because it is
         /// the one surface that should be bright regardless of lighting.
         /// </summary>

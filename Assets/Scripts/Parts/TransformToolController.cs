@@ -287,9 +287,13 @@ namespace VexDesigner.Parts
 
         private void ContinueDrag()
         {
-            // Click to start, click to finish - the same pattern as grabbing,
-            // and kinder than holding a button through a long adjustment.
-            if (selection == null || pointer.PrimaryPressedThisFrame)
+            // Press and hold, release to finish.
+            //
+            // Click-to-start/click-to-finish was the wrong call here: a gizmo
+            // axis is a continuous drag, and every other 3D tool ends it on
+            // button release. Requiring a second click left the cursor captured
+            // with no obvious way out.
+            if (selection == null || !pointer.PrimaryHeld)
             {
                 EndDrag();
                 return;
