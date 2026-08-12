@@ -228,10 +228,13 @@ namespace VexDesigner.EditorTools
         /// </summary>
         private static void BuildWallButtons(GameObject parent)
         {
-            float z = (RoomDepthIn * 0.5f) - 3.2f;
-            const float x = 62f;
+            // Left-hand wall, clear of the benches. Facing into the room, so
+            // the outward normal is +X.
+            float x = -(RoomWidthIn * 0.5f) + 3.2f;
+            const float z = 46f;
+            var outward = Vector3.right;
 
-            BuildConfirmButton(parent, new Vector3(x, BenchHeightIn + 34f, z),
+            BuildConfirmButton(parent, new Vector3(x, 58f, z), outward,
                 ConfirmButton.Target.FloorParts,
                 "CLEAR FLOOR",
                 "Delete parts on the floor?",
@@ -239,34 +242,49 @@ namespace VexDesigner.EditorTools
 
             // Red, larger consequence, placed lower so it is not the one
             // reached for by habit.
-            BuildConfirmButton(parent, new Vector3(x, BenchHeightIn + 18f, z),
+            BuildConfirmButton(parent, new Vector3(x, 40f, z), outward,
                 ConfirmButton.Target.AllParts,
                 "DELETE ALL",
                 "Delete EVERY part?",
                 new Color(0.72f, 0.12f, 0.10f));
         }
 
+        /// <summary>
+        /// Builds a labelled confirm button on a wall.
+        ///
+        /// <paramref name="outward"/> is the wall's normal into the room, which
+        /// is all that is needed to orient every piece - so the same builder
+        /// works on any wall without a special case per surface.
+        /// </summary>
         private static void BuildConfirmButton(
-            GameObject parent, Vector3 positionIn, ConfirmButton.Target target,
+            GameObject parent, Vector3 positionIn, Vector3 outward,
+            ConfirmButton.Target target,
             string idleLabel, string confirmLabel, Color faceColour)
         {
-            const float widthIn = 26f;
-            const float heightIn = 11f;
+            const float widthIn = 30f;
+            const float heightIn = 13f;
 
             var mount = new GameObject($"Button_{target}");
             mount.transform.SetParent(parent.transform, false);
 
-            GameObject plate = Box(mount, "Plate", positionIn,
-                new Vector3(widthIn + 2f, heightIn + 2f, 1.2f),
+            Vector3 centre = new Vector3(In(positionIn.x), In(positionIn.y), In(positionIn.z));
+
+            // Thickness runs along the wall normal; width and height across it.
+            Vector3 across = Vector3.Cross(Vector3.up, outward).normalized;
+            Vector3 size = (across * In(widthIn)) + (Vector3.up * In(heightIn));
+            Vector3 plateSize = (across * In(widthIn + 2.5f)) + (Vector3.up * In(heightIn + 2.5f));
+
+            GameObject plate = BoxWorld(mount, "Plate",
+                centre, Abs(plateSize) + (Abs(outward) * In(1.2f)),
                 WorkshopMaterials.Steel, widthIn, heightIn);
 
             // Frame is decoration; leaving its collider live would let the user
             // aim at the surround and wonder why nothing happened.
             plate.GetComponent<Collider>().enabled = false;
 
-            GameObject face = Box(mount, "Button",
-                positionIn + new Vector3(0f, 0f, -1.3f),
-                new Vector3(widthIn, heightIn, 2.2f),
+            GameObject face = BoxWorld(mount, "Button",
+                centre + (outward * In(1.3f)),
+                Abs(size) + (Abs(outward) * In(2.2f)),
                 WorkshopMaterials.Steel, widthIn, heightIn);
 
             face.isStatic = false;
@@ -277,51 +295,94 @@ namespace VexDesigner.EditorTools
             var button = face.AddComponent<ConfirmButton>();
             button.Configure(target, idleLabel, confirmLabel);
 
-            // Everything on the face lives in a unit-sized anchor, so the grey
-            // bar can be scaled in 0..1 without knowing the button's size.
-            var anchor = new GameObject("Face");
-            anchor.transform.SetParent(mount.transform, false);
-            anchor.transform.position = new Vector3(
-                In(positionIn.x), In(positionIn.y), In(positionIn.z - 2.5f));
-            anchor.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
-            anchor.transform.localScale =
-                new Vector3(In(widthIn), In(heightIn), 1f);
+            Vector3 frontOfFace = centre + (outward * In(2.6f));
 
-            var barGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            barGo.name = "GreyBar";
-            barGo.transform.SetParent(anchor.transform, false);
-            barGo.transform.localPosition = new Vector3(0f, 0f, -0.001f);
-            barGo.transform.localScale = Vector3.one;
-            Object.DestroyImmediate(barGo.GetComponent<Collider>());
-            barGo.GetComponent<MeshRenderer>().sharedMaterial =
-                WorkshopMaterials.CreateButtonFace("Grey", new Color(0.12f, 0.12f, 0.13f));
+            // TextMeshPro reads correctly when its forward points the same way
+            // the reader is looking - that is, *into* the wall. Facing it out
+            // of the wall renders it back-to-front, which is what made the
+            // first version come out mirrored.
+            Quaternion readable = Quaternion.LookRotation(-outward, Vector3.up);
 
+            // The grey bar sits in its own anchor scaled to the face, so it can
+            // be driven in 0..1 without knowing the button's real size.
+            var barAnchor = new GameObject("BarAnchor");
+            barAnchor.transform.SetParent(mount.transform, false);
+            barAnchor.transform.position = frontOfFace - (outward * In(0.1f));
+            barAnchor.transform.rotation = readable;
+            barAnchor.transform.localScale = new Vector3(In(widthIn), In(heightIn), 1f);
+
+            // A thin box rather than a quad: a quad is single-sided and would
+            // vanish depending on which way it ended up facing.
+            var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bar.name = "GreyBar";
+            bar.transform.SetParent(barAnchor.transform, false);
+            bar.transform.localPosition = Vector3.zero;
+            bar.transform.localScale = new Vector3(1f, 1f, 0.02f);
+            Object.DestroyImmediate(bar.GetComponent<Collider>());
+            bar.GetComponent<MeshRenderer>().sharedMaterial =
+                WorkshopMaterials.CreateButtonFace("Grey", new Color(0.10f, 0.10f, 0.11f));
+
+            // The label is NOT parented to the scaled anchor. A non-uniform
+            // parent scale stretches glyphs, which is why the first version was
+            // both squashed and hard to read.
             var labelGo = new GameObject("Label");
-            labelGo.transform.SetParent(anchor.transform, false);
-            labelGo.transform.localPosition = new Vector3(0f, 0f, -0.002f);
+            labelGo.transform.SetParent(mount.transform, false);
+            labelGo.transform.position = frontOfFace;
+            labelGo.transform.rotation = readable;
 
             var text = labelGo.AddComponent<TMPro.TextMeshPro>();
             text.text = idleLabel;
             text.alignment = TMPro.TextAlignmentOptions.Center;
-            text.enableWordWrapping = true;
+            text.textWrappingMode = TMPro.TextWrappingModes.Normal;
             text.color = Color.white;
 
-            // Sized in the anchor's local space, which is one unit across the
-            // whole button face. Auto-sizing lets a long confirmation question
-            // shrink to fit while the short idle label stays large, rather than
-            // every state being limited by the longest one.
+            // World units, so this is a real physical letter height. Auto-size
+            // lets the long confirmation question shrink to fit while the short
+            // idle label stays large.
             text.enableAutoSizing = true;
-            text.fontSizeMin = 0.05f;
-            text.fontSizeMax = 0.30f;
-            text.fontSize = 0.30f;
+            text.fontSizeMin = 0.03f;
+            text.fontSizeMax = 0.16f;
+            text.fontSize = 0.16f;
 
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(0.94f, 0.88f);
+                rect.sizeDelta = new Vector2(In(widthIn - 2f), In(heightIn - 2f));
             }
 
-            button.Bind(text, barGo.transform);
+            button.Bind(text, bar.transform);
+        }
+
+        private static Vector3 Abs(Vector3 v)
+        {
+            return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
+        }
+
+        /// <summary>Box placed by world position and world-axis size.</summary>
+        private static GameObject BoxWorld(
+            GameObject parent, string name, Vector3 centre, Vector3 size,
+            WorkshopMaterials.Surface surface, float tileWidthIn, float tileHeightIn)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.transform.SetParent(parent.transform, false);
+            go.transform.position = centre;
+            go.transform.localScale = size;
+            go.isStatic = true;
+
+            if (surface?.Material != null)
+            {
+                var renderer = go.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = surface.Material;
+
+                Vector2 tiling = surface.TilingFor(tileWidthIn, tileHeightIn);
+                var block = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(block);
+                block.SetVector("_BaseMap_ST", new Vector4(tiling.x, tiling.y, 0f, 0f));
+                renderer.SetPropertyBlock(block);
+            }
+
+            return go;
         }
 
         private static void BuildPegboard(GameObject parent, float benchZ)

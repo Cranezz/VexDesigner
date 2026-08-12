@@ -131,6 +131,7 @@ namespace VexDesigner.EditorTools
             BuildShelf();
             BuildPlayer();
             BuildInterface();
+            BuildMeasurementDisplay();
 
             VerifyShaders();
 
@@ -386,6 +387,70 @@ namespace VexDesigner.EditorTools
             // does not exist in a real build.
             player.AddComponent<PlayerSpawn>().Configure(
                 GarageRoomBuilder.PlayerSpawnPosition, GarageRoomBuilder.PlayerSpawnYaw);
+        }
+
+        /// <summary>
+        /// The trail and distance readout shown while dragging a part with the
+        /// transform tool.
+        ///
+        /// World space rather than screen space: the line has to sit in the
+        /// scene along the actual path travelled, and the label follows it.
+        /// </summary>
+        private static void BuildMeasurementDisplay()
+        {
+            var root = new GameObject("MeasurementDisplay");
+
+            var lineGo = new GameObject("Trail");
+            lineGo.transform.SetParent(root.transform, false);
+
+            var line = lineGo.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.widthMultiplier = In(0.12f);
+            line.numCapVertices = 2;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            line.receiveShadows = false;
+            line.enabled = false;
+
+            // Same overlay shader as the gizmo, so the trail stays visible when
+            // it passes behind the bench - which is exactly when knowing how far
+            // something has moved matters most.
+            Shader overlay = Shader.Find("VexDesigner/GizmoOverlay");
+            if (overlay != null)
+            {
+                var mat = new Material(overlay) { name = "MeasurementTrail" };
+                mat.SetColor("_BaseColor", new Color(1f, 0.85f, 0.3f));
+                line.material = mat;
+            }
+
+            var labelGo = new GameObject("Label");
+            labelGo.transform.SetParent(root.transform, false);
+
+            var text = labelGo.AddComponent<TMPro.TextMeshPro>();
+            text.text = "0\"";
+            text.fontSize = 0.09f;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.color = new Color(1f, 0.93f, 0.6f);
+            text.fontStyle = TMPro.FontStyles.Bold;
+            text.enabled = false;
+
+            // Outlined so the number stays legible against the bench, the mat,
+            // and the concrete floor without needing a background panel.
+            text.fontMaterial.EnableKeyword("OUTLINE_ON");
+            text.outlineColor = new Color32(0, 0, 0, 255);
+            text.outlineWidth = 0.25f;
+
+            var rect = labelGo.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.sizeDelta = new Vector2(0.6f, 0.15f);
+            }
+
+            var display = root.AddComponent<MeasurementDisplay>();
+            var so = new SerializedObject(display);
+            so.FindProperty("line").objectReferenceValue = line;
+            so.FindProperty("label").objectReferenceValue = text;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // ------------------------------------------------------------------

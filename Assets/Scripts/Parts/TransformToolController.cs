@@ -46,14 +46,35 @@ namespace VexDesigner.Parts
         // reference. Frame-to-frame deltas accumulate drift over a long drag.
         private Vector3 dragAxis;
         private Vector3 dragOrigin;
-        private float dragStartOffset;
-        private Vector3 dragStartVector;
+        private float lastAxisOffset;
+
+        /// <summary>Where the assembly's centre was when the drag began.</summary>
+        private Vector3 dragStartCentre;
+
+        /// <summary>
+        /// Screen direction that means "turn this ring forwards", derived from
+        /// the point on the ring that was grabbed. Dragging along it rotates
+        /// one way, against it the other - so grabbing the top of a ring and
+        /// pulling right turns it clockwise, as the ring itself would.
+        /// </summary>
+        private Vector2 rotateScreenTangent;
+
+        private float rotateAccumulated;
+        private LineRenderer rotationArc;
 
         private bool relativeAxes;
 
         public bool IsActive { get; private set; }
 
         public bool IsDragging => dragging != null;
+
+        /// <summary>
+        /// True while a rotation ring is being dragged. The view is locked and
+        /// the crosshair hidden for the duration, because the mouse is turning
+        /// the part rather than aiming at anything.
+        /// </summary>
+        public bool IsRotating =>
+            dragging != null && dragging.HandleKind == TransformHandle.Kind.Rotate;
 
         public bool RelativeAxes => relativeAxes;
 
@@ -110,16 +131,14 @@ namespace VexDesigner.Parts
                 placement.SuppressInput = IsDragging || hovered != null;
             }
 
-            // The view is deliberately NOT locked during a drag.
+            // Locked only while turning a ring.
             //
-            // In first person the aim ray *is* the cursor: it comes from where
-            // the head is pointing. Locking the view froze the ray, so the drag
-            // recomputed the same position every frame and nothing moved - the
-            // gizmo appeared completely dead while also trapping the camera.
-            //
-            // Grabbing locks the view for the opposite reason: there the mouse
-            // is being used to rotate the part instead of to aim.
-            interactionLock.CameraOrbitLocked = false;
+            // Moving must leave the view free: in first person the aim ray *is*
+            // the cursor, so a frozen view means a frozen ray and the drag
+            // reports no movement at all. Rotation has the opposite need - it
+            // reads the mouse directly, and a view that swings away mid-turn
+            // takes the part out of sight.
+            interactionLock.CameraOrbitLocked = IsRotating;
         }
 
         // ------------------------------------------------------------------
@@ -249,7 +268,7 @@ namespace VexDesigner.Parts
 
         private void UpdateHandleHover()
         {
-            TransformHandle handle = RaycastForHandle();
+            TransformHandle handle = RaycastForHandle(out RaycastHit hit);
 
             if (handle != hovered)
             {
@@ -265,7 +284,7 @@ namespace VexDesigner.Parts
 
             if (handle != null)
             {
-                BeginDrag(handle);
+                BeginDrag(handle, hit.point);
                 return;
             }
 
@@ -278,11 +297,16 @@ namespace VexDesigner.Parts
             }
         }
 
-        private void BeginDrag(TransformHandle handle)
+        private void BeginDrag(TransformHandle handle, Vector3 grabPoint)
         {
             dragging = handle;
             dragAxis = handle.WorldAxis;
+
+            // The axis line stays fixed for the whole drag. Recomputing it from
+            // the moving gizmo made the reference chase the part by a frame,
+            // which is what made moves lag behind the cursor.
             dragOrigin = gizmoRoot.transform.position;
+            dragStartCentre = selection != null ? selection.GetCentre() : dragOrigin;
 
             // Deliberately positioning a part is a statement that it belongs
             // there, so it is pinned. Otherwise gravity would undo the
@@ -292,12 +316,51 @@ namespace VexDesigner.Parts
 
             if (handle.HandleKind == TransformHandle.Kind.Move)
             {
-                dragStartOffset = ProjectOntoAxis(pointer.AimRay, dragOrigin, dragAxis);
+                lastAxisOffset = ProjectOntoAxis(pointer.AimRay, dragOrigin, dragAxis);
             }
             else
             {
-                dragStartVector = ProjectOntoPlane(pointer.AimRay, dragOrigin, dragAxis);
+                BeginRotateDrag(grabPoint);
             }
+        }
+
+        /// <summary>
+        /// Works out which way the mouse must move to turn the ring forwards,
+        /// from the point on the ring that was grabbed.
+        ///
+        /// The tangent at the grab point, projected to screen space. Grab the
+        /// top of a ring and pull right and it turns the way the ring does -
+        /// which is how a physical dial behaves, and is far more predictable
+        /// than mapping raw horizontal movement to rotation regardless of where
+        /// the ring was taken hold of.
+        /// </summary>
+        private void BeginRotateDrag(Vector3 grabPoint)
+        {
+            rotateAccumulated = 0f;
+
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                rotateScreenTangent = Vector2.right;
+                return;
+            }
+
+            Vector3 radial = Vector3.ProjectOnPlane(grabPoint - dragOrigin, dragAxis);
+            if (radial.sqrMagnitude < 1e-8f)
+            {
+                rotateScreenTangent = Vector2.right;
+                return;
+            }
+
+            Vector3 tangent = Vector3.Cross(dragAxis, radial).normalized;
+
+            Vector3 screenA = cam.WorldToScreenPoint(grabPoint);
+            Vector3 screenB = cam.WorldToScreenPoint(grabPoint + (tangent * 0.05f));
+            Vector2 screenTangent = (Vector2)(screenB - screenA);
+
+            rotateScreenTangent = screenTangent.sqrMagnitude > 1e-6f
+                ? screenTangent.normalized
+                : Vector2.right;
         }
 
         private void ContinueDrag()
@@ -317,26 +380,66 @@ namespace VexDesigner.Parts
             if (dragging.HandleKind == TransformHandle.Kind.Move)
             {
                 float offset = ProjectOntoAxis(pointer.AimRay, dragOrigin, dragAxis);
-                float delta = (offset - dragStartOffset) * PrecisionFactor;
+                float delta = (offset - lastAxisOffset) * PrecisionFactor;
+                lastAxisOffset = offset;
 
                 selection.Translate(dragAxis * delta);
-                dragStartOffset = offset;
-                dragOrigin = gizmoRoot.transform.position;
+
+                // Trail back to where it started, labelled with how far it has
+                // come, so a move can be made to a measurement rather than by
+                // eye.
+                MeasurementDisplay.Show(dragStartCentre, selection.GetCentre());
             }
             else
             {
-                Vector3 current = ProjectOntoPlane(pointer.AimRay, dragOrigin, dragAxis);
-                if (current.sqrMagnitude < 1e-6f || dragStartVector.sqrMagnitude < 1e-6f)
-                {
-                    return;
-                }
+                // Rotation reads the mouse directly rather than the aim ray,
+                // because the view is locked while turning - a frozen view
+                // means a frozen ray, which would report no movement at all.
+                float along = Vector2.Dot(pointer.DragDelta, rotateScreenTangent);
+                float angle = along * 0.35f * PrecisionFactor;
 
-                float angle = Vector3.SignedAngle(dragStartVector, current, dragAxis)
-                    * PrecisionFactor;
-
+                rotateAccumulated += angle;
                 selection.Rotate(Quaternion.AngleAxis(angle, dragAxis), dragOrigin);
-                dragStartVector = current;
+
+                DrawRotationArc();
             }
+        }
+
+        /// <summary>
+        /// Draws the swept angle as a bright arc on the ring being turned, so
+        /// how far the part has come is visible without counting.
+        /// </summary>
+        private void DrawRotationArc()
+        {
+            if (rotationArc == null || dragging == null)
+            {
+                return;
+            }
+
+            float radius = gizmoRoot.transform.localScale.x * 0.75f;
+            float sweep = Mathf.Clamp(rotateAccumulated, -360f, 360f);
+
+            // One segment per two degrees, so a small turn is not drawn as a
+            // single straight chord.
+            int segments = Mathf.Max(2, Mathf.CeilToInt(Mathf.Abs(sweep) / 2f));
+
+            // Any vector perpendicular to the axis serves as the zero mark.
+            Vector3 reference = Vector3.Cross(dragAxis, Vector3.up);
+            if (reference.sqrMagnitude < 1e-6f)
+            {
+                reference = Vector3.Cross(dragAxis, Vector3.forward);
+            }
+            reference = reference.normalized * radius;
+
+            rotationArc.positionCount = segments + 1;
+            for (int i = 0; i <= segments; i++)
+            {
+                float t = i / (float)segments;
+                Quaternion turn = Quaternion.AngleAxis(sweep * t, dragAxis);
+                rotationArc.SetPosition(i, dragOrigin + (turn * reference));
+            }
+
+            rotationArc.enabled = Mathf.Abs(sweep) > 0.5f;
         }
 
         private void EndDrag()
@@ -348,6 +451,14 @@ namespace VexDesigner.Parts
             }
 
             dragging = null;
+            rotateAccumulated = 0f;
+
+            MeasurementDisplay.Hide();
+            if (rotationArc != null)
+            {
+                rotationArc.enabled = false;
+            }
+
             interactionLock.CameraOrbitLocked = false;
         }
 
@@ -386,8 +497,10 @@ namespace VexDesigner.Parts
                 : Vector3.zero;
         }
 
-        private TransformHandle RaycastForHandle()
+        private TransformHandle RaycastForHandle(out RaycastHit nearestHit)
         {
+            nearestHit = default;
+
             if (gizmoRoot == null || !gizmoRoot.activeSelf)
             {
                 return null;
@@ -416,6 +529,7 @@ namespace VexDesigner.Parts
 
                 best = candidate;
                 bestDistance = hits[i].distance;
+                nearestHit = hits[i];
             }
 
             return best;
@@ -451,6 +565,8 @@ namespace VexDesigner.Parts
             CreateRotateHandle(Vector3.right, new Color(0.95f, 0.25f, 0.25f));
             CreateRotateHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateRotateHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
+
+            BuildRotationArc();
 
             gizmoRoot.SetActive(false);
         }
@@ -514,6 +630,29 @@ namespace VexDesigner.Parts
 
             root.AddComponent<TransformHandle>()
                 .Configure(TransformHandle.Kind.Rotate, axis, colour);
+        }
+
+        /// <summary>
+        /// The arc drawn over the ring being turned, showing how far the part
+        /// has come. Lives outside the gizmo hierarchy so it can be drawn in
+        /// world space without inheriting the gizmo's screen-size scaling.
+        /// </summary>
+        private void BuildRotationArc()
+        {
+            var go = new GameObject("RotationArc");
+            rotationArc = go.AddComponent<LineRenderer>();
+
+            rotationArc.useWorldSpace = true;
+            rotationArc.widthMultiplier = 0.004f;
+            rotationArc.numCapVertices = 2;
+            rotationArc.material = handleMaterial;
+            rotationArc.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rotationArc.receiveShadows = false;
+            rotationArc.enabled = false;
+
+            var block = new MaterialPropertyBlock();
+            block.SetColor(Shader.PropertyToID("_BaseColor"), new Color(1f, 0.92f, 0.4f));
+            rotationArc.SetPropertyBlock(block);
         }
 
         private void AddPiece(

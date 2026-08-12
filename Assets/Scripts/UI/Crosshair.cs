@@ -19,6 +19,7 @@ namespace VexDesigner.UI
         [SerializeField] private Image hand;
         [SerializeField] private Image padlock;
         [SerializeField] private PartPlacementController placement;
+        [SerializeField] private TransformToolController transformTool;
 
         private static Sprite dotSprite;
         private static Sprite handSprite;
@@ -29,6 +30,11 @@ namespace VexDesigner.UI
             if (placement == null)
             {
                 placement = FindAnyObjectByType<PartPlacementController>();
+            }
+
+            if (transformTool == null)
+            {
+                transformTool = FindAnyObjectByType<TransformToolController>();
             }
         }
 
@@ -42,6 +48,17 @@ namespace VexDesigner.UI
             // Three states, in priority order. The padlock wins because
             // "you are holding something that will not move" is the single
             // most useful thing to know at that moment.
+            // Hidden entirely while turning a gizmo ring: the view is locked
+            // and the mouse is driving the rotation, so a crosshair pointing
+            // at nothing in particular is just noise over the part.
+            if (transformTool != null && transformTool.IsRotating)
+            {
+                if (dot != null) { dot.enabled = false; }
+                if (hand != null) { hand.enabled = false; }
+                if (padlock != null) { padlock.enabled = false; }
+                return;
+            }
+
             bool holdingFrozen = placement.IsCarrying && placement.CarriedIsFrozen;
 
             // HasGrabTarget, not HasTarget: in transform mode, clicking a

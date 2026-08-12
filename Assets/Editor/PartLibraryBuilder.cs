@@ -136,28 +136,16 @@ namespace VexDesigner.EditorTools
                 definition.displayName = Prettify(key);
             }
 
-            // Prefer the VEX SKU as the part's identity. It is shorter, stable
-            // across renames, and is what a person would look the part up by.
+            // Part IDs are authored by hand and never touched again.
             //
-            // The previous ID is kept in legacyIds rather than discarded, so a
-            // save file written before the change can still be loaded. That is
-            // the entire reason that field exists.
-            string sku = ExtractSku(key);
-            string preferredId = string.IsNullOrEmpty(sku) ? key : sku;
-
-            if (definition.partId != preferredId)
+            // A suggestion is filled in on creation - the SKU if the file name
+            // carries one - but a rebuild must never overwrite it. These IDs
+            // are what save files reference, so a rebuild silently renaming
+            // them would orphan every robot ever built.
+            if (isNew)
             {
-                if (!string.IsNullOrEmpty(definition.partId))
-                {
-                    var legacy = new List<string>(definition.legacyIds);
-                    if (!legacy.Contains(definition.partId))
-                    {
-                        legacy.Add(definition.partId);
-                        definition.legacyIds = legacy.ToArray();
-                    }
-                }
-
-                definition.partId = preferredId;
+                string sku = ExtractSku(key);
+                definition.partId = string.IsNullOrEmpty(sku) ? key : sku;
             }
 
             // The mesh reference is always refreshed: re-exporting a part at a
