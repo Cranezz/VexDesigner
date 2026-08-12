@@ -41,11 +41,18 @@ namespace VexDesigner.Parts
         private float current;
         private float target;
 
+        [Tooltip("Colour shown while a part is held. White so it is instantly " +
+                 "distinguishable from the blue of hover and of frozen.")]
+        [SerializeField] private Color grabbedColour = new Color(1f, 1f, 1f);
+
         /// <summary>
         /// Persistent glow, independent of hover. Used to mark a frozen part,
         /// which has to stay visibly marked when the cursor moves away.
         /// </summary>
         private bool pinned;
+
+        /// <summary>Set while the part is in hand.</summary>
+        private bool grabbed;
 
         /// <summary>
         /// When false, the object refuses to highlight. Used to signal "you
@@ -95,20 +102,37 @@ namespace VexDesigner.Parts
             Apply();
         }
 
+        /// <summary>
+        /// Marks the object as held. Distinct from both hover and pinned,
+        /// because a part can be all three at once and the user needs to be
+        /// able to tell which.
+        /// </summary>
+        public void SetGrabbed(bool value)
+        {
+            if (grabbed == value)
+            {
+                return;
+            }
+
+            grabbed = value;
+            Apply();
+        }
+
         private void Apply()
         {
-            // Pinned is a floor, not a replacement: a pinned part still
-            // brightens on hover, so it stays clear that it can be interacted
-            // with rather than looking inert.
+            // The three states compose by taking the brightest channel rather
+            // than replacing each other, so a held frozen part reads as both
+            // rather than the newer state hiding the older one.
             Color emission = highlightColour * (intensity * current);
 
             if (pinned)
             {
-                Color pin = pinnedColour * (intensity * 0.55f);
-                emission = new Color(
-                    Mathf.Max(emission.r, pin.r),
-                    Mathf.Max(emission.g, pin.g),
-                    Mathf.Max(emission.b, pin.b));
+                emission = Brightest(emission, pinnedColour * (intensity * 0.55f));
+            }
+
+            if (grabbed)
+            {
+                emission = Brightest(emission, grabbedColour * (intensity * 0.45f));
             }
 
             for (int i = 0; i < renderers.Length; i++)
@@ -123,6 +147,12 @@ namespace VexDesigner.Parts
                 block.SetColor(EmissionColorId, emission);
                 r.SetPropertyBlock(block);
             }
+        }
+
+        private static Color Brightest(Color a, Color b)
+        {
+            return new Color(
+                Mathf.Max(a.r, b.r), Mathf.Max(a.g, b.g), Mathf.Max(a.b, b.b));
         }
 
         private void OnDisable()

@@ -398,12 +398,19 @@ namespace VexDesigner.EditorTools
             hand.GetComponent<Image>().sprite = Crosshair.GetHandSprite();
             hand.GetComponent<Image>().enabled = false;
 
+            GameObject padlock = CreateHudImage(canvasGo.transform, "Padlock", 30f);
+            padlock.GetComponent<Image>().sprite = Crosshair.GetPadlockSprite();
+            padlock.GetComponent<Image>().color = new Color(0.55f, 0.75f, 1f);
+            padlock.GetComponent<Image>().enabled = false;
+
             BuildKeybindHints(canvasGo.transform);
+            BuildMessageBanner(canvasGo.transform);
 
             var crosshair = canvasGo.AddComponent<Crosshair>();
             var so = new SerializedObject(crosshair);
             so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
             so.FindProperty("hand").objectReferenceValue = hand.GetComponent<Image>();
+            so.FindProperty("padlock").objectReferenceValue = padlock.GetComponent<Image>();
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // An EventSystem is required for any UI interaction. Without one
@@ -414,6 +421,46 @@ namespace VexDesigner.EditorTools
                 events.AddComponent<UnityEngine.EventSystems.EventSystem>();
                 events.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
             }
+        }
+
+        private static void BuildMessageBanner(Transform parent)
+        {
+            var go = new GameObject("MessageBanner", typeof(RectTransform), typeof(CanvasGroup));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+
+            // Top centre, below where a title bar would sit, so it reads as a
+            // notification rather than part of the scene.
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -48f);
+            rect.sizeDelta = new Vector2(900f, 52f);
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            var text = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+            text.fontSize = 26f;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.raycastTarget = false;
+            text.text = string.Empty;
+
+            var banner = go.AddComponent<MessageBanner>();
+            var so = new SerializedObject(banner);
+            so.FindProperty("label").objectReferenceValue = text;
+            so.FindProperty("group").objectReferenceValue = go.GetComponent<CanvasGroup>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            go.GetComponent<CanvasGroup>().alpha = 0f;
+            go.GetComponent<CanvasGroup>().blocksRaycasts = false;
         }
 
         private static void BuildKeybindHints(Transform parent)

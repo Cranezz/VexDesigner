@@ -98,11 +98,23 @@ namespace VexDesigner.InputSources
 
         private void ReadActions(Keyboard keyboard, Mouse mouse)
         {
-            // Scroll pushes a carried part away or draws it closer. Reported
-            // as a signed notch count; the consumer decides what a notch means.
-            ZoomDelta = (mouse != null && CursorLocked)
-                ? mouse.scroll.ReadValue().y / 120f
-                : 0f;
+            // Scroll pushes a carried part away or draws it closer, reported as
+            // a signed notch count.
+            //
+            // The raw value is either +/-120 or +/-1 depending on platform and
+            // Input System version. Dividing unconditionally by 120 turned a
+            // notch into 0.008 on a machine using the second convention, which
+            // is why scrolling appeared to do nothing at all. Normalising by
+            // magnitude handles both.
+            if (mouse != null && CursorLocked)
+            {
+                float raw = mouse.scroll.ReadValue().y;
+                ZoomDelta = Mathf.Abs(raw) > 1.5f ? raw / 120f : raw;
+            }
+            else
+            {
+                ZoomDelta = 0f;
+            }
 
             if (keyboard == null || !CursorLocked)
             {

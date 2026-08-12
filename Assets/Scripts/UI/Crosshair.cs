@@ -17,10 +17,12 @@ namespace VexDesigner.UI
     {
         [SerializeField] private Image dot;
         [SerializeField] private Image hand;
+        [SerializeField] private Image padlock;
         [SerializeField] private PartPlacementController placement;
 
         private static Sprite dotSprite;
         private static Sprite handSprite;
+        private static Sprite padlockSprite;
 
         private void Awake()
         {
@@ -37,12 +39,15 @@ namespace VexDesigner.UI
                 return;
             }
 
-            // Show the hand when something is targetable, or when already
-            // carrying - in both cases a click will do something.
-            bool interactive = placement.HasTarget || placement.IsCarrying;
+            // Three states, in priority order. The padlock wins because
+            // "you are holding something that will not move" is the single
+            // most useful thing to know at that moment.
+            bool holdingFrozen = placement.IsCarrying && placement.CarriedIsFrozen;
+            bool interactive = !holdingFrozen && (placement.HasTarget || placement.IsCarrying);
 
-            if (dot != null) { dot.enabled = !interactive; }
+            if (dot != null) { dot.enabled = !interactive && !holdingFrozen; }
             if (hand != null) { hand.enabled = interactive; }
+            if (padlock != null) { padlock.enabled = holdingFrozen; }
         }
 
         // ------------------------------------------------------------------
@@ -143,6 +148,76 @@ namespace VexDesigner.UI
 
             handSprite = BuildSprite(pixels, size, "CrosshairHand");
             return handSprite;
+        }
+
+        public static Sprite GetPadlockSprite()
+        {
+            if (padlockSprite != null)
+            {
+                return padlockSprite;
+            }
+
+            // A closed padlock: shackle arch over a solid body.
+            string[] rows =
+            {
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+                "..........XXXXXXXXXX............",
+                "........XX..........XX..........",
+                ".......X..............X.........",
+                "......X................X........",
+                "......X................X........",
+                "......X................X........",
+                "......X................X........",
+                "......X................X........",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "....XXXXXXXXXX..XXXXXXXXXX......",
+                "....XXXXXXXXX....XXXXXXXXX......",
+                "....XXXXXXXXX....XXXXXXXXX......",
+                "....XXXXXXXXXX..XXXXXXXXXX......",
+                "....XXXXXXXXXX..XXXXXXXXXX......",
+                "....XXXXXXXXXX..XXXXXXXXXX......",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "....XXXXXXXXXXXXXXXXXXXXXX......",
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+                "................................",
+            };
+
+            padlockSprite = FromBitmap(rows, "CrosshairPadlock");
+            return padlockSprite;
+        }
+
+        /// <summary>
+        /// Turns an ASCII bitmap into a sprite. Bitmap rows read top-down and
+        /// texture rows read bottom-up, so the rows are indexed in reverse.
+        /// </summary>
+        private static Sprite FromBitmap(string[] rows, string name)
+        {
+            int size = rows.Length;
+            var pixels = new Color[size * size];
+
+            for (int y = 0; y < size; y++)
+            {
+                string row = rows[size - 1 - y];
+                for (int x = 0; x < size; x++)
+                {
+                    bool on = x < row.Length && row[x] == 'X';
+                    pixels[(y * size) + x] = on ? Color.white : Color.clear;
+                }
+            }
+
+            return BuildSprite(pixels, size, name);
         }
 
         private static Sprite BuildSprite(Color[] pixels, int size, string name)

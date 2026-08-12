@@ -108,6 +108,72 @@ namespace VexDesigner.Parts
             }
         }
 
+        /// <summary>Marks every member as held, or releases them.</summary>
+        public void SetGrabbed(bool grabbed)
+        {
+            foreach (PartInstance part in members)
+            {
+                var highlight = part == null ? null : part.GetComponent<Highlightable>();
+                if (highlight != null)
+                {
+                    highlight.SetGrabbed(grabbed);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wakes any sleeping body resting against this group.
+        ///
+        /// Unity puts settled rigidbodies to sleep to save cost, and a sleeping
+        /// body does not notice that whatever was holding it up has gone. Take
+        /// a part out from under a stack and the stack hangs in mid-air until
+        /// something else disturbs it. Waking the neighbours on every move is
+        /// what makes support actually behave like support.
+        /// </summary>
+        public void WakeNeighbours()
+        {
+            foreach (PartInstance part in members)
+            {
+                var renderer = part == null ? null : part.GetComponentInChildren<Renderer>();
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                Bounds bounds = renderer.bounds;
+
+                // Padded, because a resting contact sits fractionally outside
+                // the bounds and would otherwise be missed.
+                Collider[] nearby = Physics.OverlapBox(
+                    bounds.center,
+                    bounds.extents + (Vector3.one * 0.02f),
+                    Quaternion.identity,
+                    ~0,
+                    QueryTriggerInteraction.Ignore);
+
+                foreach (Collider collider in nearby)
+                {
+                    var body = collider.attachedRigidbody;
+                    if (body != null && !body.isKinematic)
+                    {
+                        body.WakeUp();
+                    }
+                }
+            }
+        }
+
+        /// <summary>Moves every member by the same offset.</summary>
+        public void Translate(Vector3 delta)
+        {
+            foreach (PartInstance part in members)
+            {
+                if (part != null)
+                {
+                    part.transform.position += delta;
+                }
+            }
+        }
+
         /// <summary>Rotates the whole group about a shared pivot.</summary>
         public void Rotate(Quaternion delta, Vector3 pivot)
         {

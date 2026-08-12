@@ -15,7 +15,7 @@ MonoBehaviour:
   partId: c-channel-1x2x1x35
   displayName: c channel 1x2x1x35
   mesh: {fileID: -2432090755550338912, guid: f8ea9c9a1a7723043af3961cd136b94e, type: 3}
-  massGrams: 100
+  massGrams: 75.70846
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85
