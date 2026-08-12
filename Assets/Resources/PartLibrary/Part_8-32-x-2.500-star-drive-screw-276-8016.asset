@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ebab36757febfb40827258d9d0a0ca3, type: 3}
+  m_Name: Part_8-32-x-2.500-star-drive-screw-276-8016
+  m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
+  partId: 8-32-x-2.500-star-drive-screw-276-8016
+  displayName: 8 32 x 2.500 star drive screw 276 8016
+  mesh: {fileID: -2432090755550338912, guid: 77c19a0424243304a8e06b0add6dc702, type: 3}
+  massGrams: 2.4
+  colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
+  smoothness: 0.55
+  metallic: 0.85

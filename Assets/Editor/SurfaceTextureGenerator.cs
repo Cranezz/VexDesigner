@@ -24,6 +24,40 @@ namespace VexDesigner.EditorTools
         private const string Folder = "Assets/Textures";
         private const int Size = 1024;
 
+        /// <summary>
+        /// Every file <see cref="Generate"/> produces. Kept as one list so the
+        /// presence check below cannot drift from what is actually generated.
+        ///
+        /// An earlier version checked for a single file, which silently stopped
+        /// working the moment a previous generator had already written a file
+        /// of that name: generation was skipped, and the scene came out using
+        /// stale textures with no normal maps at all.
+        /// </summary>
+        private static readonly string[] ExpectedTextures =
+        {
+            "Concrete_Albedo", "Concrete_Normal",
+            "Drywall_Albedo", "Drywall_Normal",
+            "CinderBlock_Albedo", "CinderBlock_Normal",
+            "BenchWood_Albedo", "BenchWood_Normal",
+            "PaintedMetal_Albedo", "PaintedMetal_Normal",
+            "Pegboard_Albedo", "Pegboard_Normal",
+            "CuttingMat_Albedo",
+        };
+
+        /// <summary>True when any expected texture is missing.</summary>
+        public static bool NeedsGeneration()
+        {
+            foreach (string name in ExpectedTextures)
+            {
+                if (!File.Exists($"{Folder}/{name}.png"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         [MenuItem("VexDesigner/Regenerate Workshop Textures")]
         public static void GenerateMenuItem()
         {
@@ -38,23 +72,28 @@ namespace VexDesigner.EditorTools
                 AssetDatabase.CreateFolder("Assets", "Textures");
             }
 
-            try
-            {
-                AssetDatabase.StartAssetEditing();
+            // Two phases, and the order matters. Phase one writes raw PNG
+            // bytes with no AssetDatabase involvement. Phase two imports them
+            // and applies importer settings.
+            //
+            // They cannot be interleaved: inside a StartAssetEditing block, or
+            // before a Refresh, AssetImporter.GetAtPath returns null for a
+            // file Unity has not yet imported. The settings would then be
+            // skipped silently - and a normal map imported as an ordinary
+            // colour texture is gamma-corrected and decoded wrongly, which
+            // shows up as lighting that is subtly but persistently off.
+            pending.Clear();
 
-                BuildSurface("Concrete", Concrete, normalStrength: 2.2f);
-                BuildSurface("Drywall", Drywall, normalStrength: 1.1f);
-                BuildSurface("CinderBlock", CinderBlock, normalStrength: 5.5f);
-                BuildSurface("BenchWood", BenchWood, normalStrength: 1.8f);
-                BuildSurface("PaintedMetal", PaintedMetal, normalStrength: 1.4f);
-                BuildSurface("Pegboard", Pegboard, normalStrength: 4.0f);
-                BuildCuttingMat();
-            }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-                AssetDatabase.Refresh();
-            }
+            BuildSurface("Concrete", Concrete, normalStrength: 2.2f);
+            BuildSurface("Drywall", Drywall, normalStrength: 1.1f);
+            BuildSurface("CinderBlock", CinderBlock, normalStrength: 5.5f);
+            BuildSurface("BenchWood", BenchWood, normalStrength: 1.8f);
+            BuildSurface("PaintedMetal", PaintedMetal, normalStrength: 1.4f);
+            BuildSurface("Pegboard", Pegboard, normalStrength: 4.0f);
+            BuildCuttingMat();
+
+            AssetDatabase.Refresh();
+            ApplyImportSettings();
         }
 
         // ------------------------------------------------------------------
@@ -409,6 +448,10 @@ namespace VexDesigner.EditorTools
         // Output
         // ------------------------------------------------------------------
 
+        private static readonly System.Collections.Generic.List<(string path, bool isNormal)> pending =
+            new System.Collections.Generic.List<(string, bool)>();
+
+        /// <summary>Phase one: write bytes only, no AssetDatabase calls.</summary>
         private static void WritePng(string name, Color[] pixels, int size, bool isNormalMap)
         {
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -419,34 +462,44 @@ namespace VexDesigner.EditorTools
             File.WriteAllBytes(path, texture.EncodeToPNG());
             UnityEngine.Object.DestroyImmediate(texture);
 
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            pending.Add((path, isNormalMap));
+        }
 
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            if (importer == null)
+        /// <summary>Phase two: configure importers now the files are imported.</summary>
+        private static void ApplyImportSettings()
+        {
+            foreach ((string path, bool isNormal) in pending)
             {
-                return;
+                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer == null)
+                {
+                    Debug.LogWarning($"[Textures] No importer for {path}; settings not applied.");
+                    continue;
+                }
+
+                if (isNormal)
+                {
+                    // Unity packs normal maps differently and treats them as
+                    // linear data. Left as Default they are gamma-corrected and
+                    // decoded wrongly, and the resulting lighting error is hard
+                    // to diagnose by eye.
+                    importer.textureType = TextureImporterType.NormalMap;
+                    importer.sRGBTexture = false;
+                }
+                else
+                {
+                    importer.textureType = TextureImporterType.Default;
+                    importer.sRGBTexture = true;
+                }
+
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Trilinear;
+                importer.anisoLevel = 8;
+                importer.mipmapEnabled = true;
+                importer.SaveAndReimport();
             }
 
-            if (isNormalMap)
-            {
-                // Marking the type matters: Unity packs normal maps
-                // differently and treats them as linear. Left as Default they
-                // are gamma-corrected and the lighting comes out wrong in a
-                // way that is hard to diagnose by eye.
-                importer.textureType = TextureImporterType.NormalMap;
-                importer.sRGBTexture = false;
-            }
-            else
-            {
-                importer.textureType = TextureImporterType.Default;
-                importer.sRGBTexture = true;
-            }
-
-            importer.wrapMode = TextureWrapMode.Repeat;
-            importer.filterMode = FilterMode.Trilinear;
-            importer.anisoLevel = 8;
-            importer.mipmapEnabled = true;
-            importer.SaveAndReimport();
+            pending.Clear();
         }
     }
 }

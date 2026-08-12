@@ -110,7 +110,7 @@ namespace VexDesigner.EditorTools
 
             // The scene is meaningless without its surfaces, so generate them
             // if missing rather than silently producing untextured boxes.
-            if (!File.Exists($"{TexturesFolder}/Concrete_Albedo.png"))
+            if (SurfaceTextureGenerator.NeedsGeneration())
             {
                 Debug.Log("[WorkshopSceneBuilder] Textures missing; generating them first.");
                 SurfaceTextureGenerator.Generate();
