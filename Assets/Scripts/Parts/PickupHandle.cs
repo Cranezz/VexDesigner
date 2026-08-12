@@ -52,6 +52,18 @@ namespace VexDesigner.Parts
 
         public void OnPrimaryClick(PartPlacementController controller)
         {
+            // In transform mode a placed part is selected, not picked up. Only
+            // already-placed parts behave differently; taking a new part from
+            // the shelf works the same in both modes, which is why the two
+            // systems coexist rather than one replacing the other.
+            TransformToolController tool = controller.TransformTool;
+            if (tool != null && tool.IsActive)
+            {
+                var instance = GetComponent<PartInstance>();
+                tool.Select(instance != null ? instance.Group : null);
+                return;
+            }
+
             controller.BeginCarryExisting(gameObject);
         }
     }

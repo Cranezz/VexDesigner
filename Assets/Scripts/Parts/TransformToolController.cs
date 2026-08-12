@@ -5,25 +5,23 @@ namespace VexDesigner.Parts
     using VexDesigner.UI;
 
     /// <summary>
-    /// The precision alternative to grabbing: select a part, then drag an axis
-    /// handle to move or turn it exactly.
+    /// The precision alternative to grabbing: select a placed part, then drag
+    /// an axis handle to move or turn it exactly.
     ///
     /// Grabbing is fast and physical but never exact - it is a hand, and hands
-    /// wobble. Assembling a robot eventually needs "move this 0.5 inches along
-    /// X and nothing else", which is what a gizmo is for. The two modes swap
-    /// with G rather than coexisting, because a click cannot both grab a part
-    /// and drag a handle.
+    /// wobble. Assembly eventually needs "move this half an inch along X and
+    /// nothing else", which is what a gizmo is for.
     ///
-    /// A selected assembly is held kinematic. Gizmo edits are meant to be
-    /// exact, and gravity dragging the part off a freshly set position the
-    /// moment it is released would defeat the point.
+    /// The two coexist rather than replacing each other. Taking parts from the
+    /// shelf works identically in both modes; the mode only changes what
+    /// clicking an *already placed* part does - grab it, or select it.
     /// </summary>
     public sealed class TransformToolController : MonoBehaviour
     {
         [Header("Gizmo")]
-        [Tooltip("On-screen size of the gizmo, as a fraction of the distance " +
-                 "to the camera. Constant apparent size means it stays usable " +
-                 "whether the part is at arm's length or across the garage.")]
+        [Tooltip("On-screen size as a fraction of the distance to the camera. " +
+                 "Constant apparent size keeps it usable whether the part is at " +
+                 "arm's length or across the garage.")]
         [SerializeField] private float screenScale = 0.16f;
 
         [SerializeField] private float aimDistance = 12f;
@@ -44,9 +42,8 @@ namespace VexDesigner.Parts
         private TransformHandle hovered;
         private TransformHandle dragging;
 
-        // Drag state, captured on mouse-down so the whole drag is measured
-        // against a fixed reference rather than the previous frame. Frame-to-
-        // frame deltas accumulate drift over a long drag.
+        // Captured on mouse-down so the whole drag measures against a fixed
+        // reference. Frame-to-frame deltas accumulate drift over a long drag.
         private Vector3 dragAxis;
         private Vector3 dragOrigin;
         private float dragStartOffset;
@@ -56,8 +53,9 @@ namespace VexDesigner.Parts
 
         public bool IsActive { get; private set; }
 
-        /// <summary>True while an axis is being dragged. Blocks look.</summary>
         public bool IsDragging => dragging != null;
+
+        public bool RelativeAxes => relativeAxes;
 
         private void Awake()
         {
@@ -68,7 +66,6 @@ namespace VexDesigner.Parts
                 ?? gameObject.AddComponent<InteractionLock>();
 
             BuildGizmo();
-            SetActive(false);
         }
 
         private void Update()
@@ -94,7 +91,7 @@ namespace VexDesigner.Parts
                 MessageBanner.Info(relativeAxes ? "Axes: part-relative" : "Axes: global");
             }
 
-            UpdateGizmoVisibility();
+            UpdateGizmo();
 
             if (dragging != null)
             {
@@ -102,7 +99,15 @@ namespace VexDesigner.Parts
             }
             else
             {
-                UpdateHoverAndClick();
+                UpdateHandleHover();
+            }
+
+            // While a handle is under the cursor or being dragged, the grab
+            // system must not also act on the click - otherwise reaching for an
+            // axis picks up the part instead.
+            if (placement != null)
+            {
+                placement.SuppressInput = IsDragging || hovered != null;
             }
 
             interactionLock.CameraOrbitLocked = IsDragging;
@@ -116,71 +121,43 @@ namespace VexDesigner.Parts
         {
             IsActive = active;
 
-            // Grab and transform cannot share the primary click, so exactly one
-            // of them is live at a time.
-            if (placement != null)
-            {
-                placement.enabled = !active;
-            }
-
             if (!active)
             {
                 EndDrag();
                 Select(null);
+
+                if (placement != null)
+                {
+                    placement.SuppressInput = false;
+                }
             }
 
-            if (gizmoRoot != null)
-            {
-                gizmoRoot.SetActive(active && selection != null);
-            }
-
-            MessageBanner.Info(active ? "Transform tool — G for grab" : "Grab mode — G for transform");
+            UpdateGizmoVisible();
+            MessageBanner.Info(active ? "Transform tool" : "Grab mode");
         }
 
         // ------------------------------------------------------------------
         // Selection
         // ------------------------------------------------------------------
 
-        private void UpdateHoverAndClick()
-        {
-            TransformHandle handle = RaycastFor<TransformHandle>(out _);
-
-            if (handle != hovered)
-            {
-                hovered?.SetHighlighted(false);
-                hovered = handle;
-                hovered?.SetHighlighted(true);
-            }
-
-            if (!pointer.PrimaryPressedThisFrame)
-            {
-                return;
-            }
-
-            if (handle != null)
-            {
-                BeginDrag(handle);
-                return;
-            }
-
-            // Clicking a part selects its whole assembly; clicking nothing
-            // clears the selection.
-            var instance = RaycastFor<PartInstance>(out _);
-            Select(instance?.Group);
-        }
-
-        private void Select(PartGroup group)
+        /// <summary>
+        /// Selects an assembly. Called by <see cref="PickupHandle"/> when the
+        /// tool is active, so that clicking a placed part selects it instead of
+        /// picking it up.
+        /// </summary>
+        public void Select(PartGroup group)
         {
             if (ReferenceEquals(group, selection))
             {
                 return;
             }
 
-            // Restore the old selection to physics before letting go of it.
+            // Hand the previous selection back to physics before letting go.
             if (selection != null)
             {
                 selection.SetGrabbed(false);
                 SetKinematic(selection, selection.IsFrozen);
+                selection.WakeNeighbours();
             }
 
             selection = group;
@@ -188,13 +165,14 @@ namespace VexDesigner.Parts
             if (selection != null)
             {
                 selection.SetGrabbed(true);
+
+                // Held still while selected: gizmo edits are meant to be exact,
+                // and gravity pulling the part off a freshly set position would
+                // defeat the point.
                 SetKinematic(selection, true);
             }
 
-            if (gizmoRoot != null)
-            {
-                gizmoRoot.SetActive(IsActive && selection != null);
-            }
+            UpdateGizmoVisible();
         }
 
         private static void SetKinematic(PartGroup group, bool kinematic)
@@ -216,19 +194,27 @@ namespace VexDesigner.Parts
             }
         }
 
+        private void UpdateGizmoVisible()
+        {
+            if (gizmoRoot != null)
+            {
+                gizmoRoot.SetActive(IsActive && selection != null);
+            }
+        }
+
         // ------------------------------------------------------------------
         // Gizmo placement
         // ------------------------------------------------------------------
 
-        private void UpdateGizmoVisibility()
+        private void UpdateGizmo()
         {
-            if (gizmoRoot == null || selection == null)
+            if (gizmoRoot == null || selection == null || !gizmoRoot.activeSelf)
             {
                 return;
             }
 
-            // R swaps translation for rotation, held rather than toggled: it is
-            // usually wanted for one adjustment, not for a whole session.
+            // R swaps arrows for rings, held rather than toggled: rotation is
+            // usually wanted for one adjustment, not a whole session.
             bool rotating = actions.RotateModifierHeld;
             moveHandles.gameObject.SetActive(!rotating);
             rotateHandles.gameObject.SetActive(rotating);
@@ -236,8 +222,6 @@ namespace VexDesigner.Parts
             Vector3 centre = selection.GetCentre();
             gizmoRoot.transform.position = centre;
 
-            // Global axes by default. Y switches to the part's own axes, which
-            // is what you want once a part has been turned off-axis.
             gizmoRoot.transform.rotation = relativeAxes && selection.Members.Count > 0
                 ? selection.Members[0].transform.rotation
                 : Quaternion.identity;
@@ -253,6 +237,37 @@ namespace VexDesigner.Parts
         // ------------------------------------------------------------------
         // Dragging
         // ------------------------------------------------------------------
+
+        private void UpdateHandleHover()
+        {
+            TransformHandle handle = RaycastForHandle();
+
+            if (handle != hovered)
+            {
+                hovered?.SetHighlighted(false);
+                hovered = handle;
+                hovered?.SetHighlighted(true);
+            }
+
+            if (!pointer.PrimaryPressedThisFrame)
+            {
+                return;
+            }
+
+            if (handle != null)
+            {
+                BeginDrag(handle);
+                return;
+            }
+
+            // Clicking empty space clears the selection. Clicking a part is
+            // handled by PickupHandle, which calls Select - so if the grab
+            // system found nothing either, there was nothing there.
+            if (placement != null && !placement.HasTarget)
+            {
+                Select(null);
+            }
+        }
 
         private void BeginDrag(TransformHandle handle)
         {
@@ -272,9 +287,8 @@ namespace VexDesigner.Parts
 
         private void ContinueDrag()
         {
-            // Click to start, click to finish - the same two-state pattern as
-            // grabbing, and far kinder than holding a button down through a
-            // long precise adjustment.
+            // Click to start, click to finish - the same pattern as grabbing,
+            // and kinder than holding a button through a long adjustment.
             if (selection == null || pointer.PrimaryPressedThisFrame)
             {
                 EndDrag();
@@ -288,6 +302,7 @@ namespace VexDesigner.Parts
 
                 selection.Translate(dragAxis * delta);
                 dragStartOffset = offset;
+                dragOrigin = gizmoRoot.transform.position;
             }
             else
             {
@@ -307,6 +322,12 @@ namespace VexDesigner.Parts
 
         private void EndDrag()
         {
+            if (hovered != null)
+            {
+                hovered.SetHighlighted(false);
+                hovered = null;
+            }
+
             dragging = null;
             interactionLock.CameraOrbitLocked = false;
         }
@@ -314,8 +335,8 @@ namespace VexDesigner.Parts
         private float PrecisionFactor => actions.PrecisionHeld ? 0.2f : 1f;
 
         /// <summary>
-        /// Distance along a line to the point nearest the aim ray. Standard
-        /// closest-approach of two skew lines.
+        /// Distance along a line to the point nearest the aim ray: the standard
+        /// closest approach of two skew lines.
         /// </summary>
         private static float ProjectOntoAxis(Ray ray, Vector3 lineOrigin, Vector3 lineDir)
         {
@@ -328,8 +349,8 @@ namespace VexDesigner.Parts
 
             float denominator = (a * c) - (b * b);
 
-            // Near-parallel: the intersection is ill-conditioned and the handle
-            // is nearly edge-on anyway, so refuse rather than jump.
+            // Near-parallel: ill-conditioned, and the handle is nearly edge-on
+            // anyway, so refuse rather than jump.
             if (Mathf.Abs(denominator) < 1e-6f)
             {
                 return 0f;
@@ -338,10 +359,6 @@ namespace VexDesigner.Parts
             return ((b * e) - (c * d)) / denominator;
         }
 
-        /// <summary>
-        /// Vector from the pivot to where the aim ray crosses the plane through
-        /// that pivot with the given normal.
-        /// </summary>
         private static Vector3 ProjectOntoPlane(Ray ray, Vector3 pivot, Vector3 normal)
         {
             var plane = new Plane(normal, pivot);
@@ -350,32 +367,36 @@ namespace VexDesigner.Parts
                 : Vector3.zero;
         }
 
-        private T RaycastFor<T>(out RaycastHit nearestHit) where T : class
+        private TransformHandle RaycastForHandle()
         {
-            nearestHit = default;
+            if (gizmoRoot == null || !gizmoRoot.activeSelf)
+            {
+                return null;
+            }
 
             int count = Physics.RaycastNonAlloc(
                 pointer.AimRay, hits, aimDistance, ~0, QueryTriggerInteraction.Collide);
 
-            T best = null;
+            TransformHandle best = null;
             float bestDistance = float.MaxValue;
 
             for (int i = 0; i < count; i++)
             {
-                if (hits[i].distance >= bestDistance)
+                var candidate = hits[i].collider.GetComponentInParent<TransformHandle>();
+                if (candidate == null || hits[i].distance >= bestDistance)
                 {
                     continue;
                 }
 
-                var candidate = hits[i].collider.GetComponentInParent<T>();
-                if (candidate == null)
+                // Only the visible set. The hidden arrows still have colliders,
+                // and hitting an invisible handle is baffling.
+                if (!candidate.gameObject.activeInHierarchy)
                 {
                     continue;
                 }
 
                 best = candidate;
                 bestDistance = hits[i].distance;
-                nearestHit = hits[i];
             }
 
             return best;
@@ -393,15 +414,17 @@ namespace VexDesigner.Parts
             moveHandles.SetParent(gizmoRoot.transform, false);
             rotateHandles.SetParent(gizmoRoot.transform, false);
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit")
-                ?? Shader.Find("Standard");
-            handleMaterial = new Material(shader) { name = "GizmoHandle" };
-            handleMaterial.EnableKeyword("_EMISSION");
-            handleMaterial.globalIlluminationFlags =
-                MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            // Draws over everything. A gizmo buried inside the part it is
+            // manipulating is useless, and that is the normal case: the handles
+            // sit at the assembly's centre, which for a C-channel is inside
+            // solid aluminium.
+            Shader shader = Shader.Find("VexDesigner/GizmoOverlay")
+                ?? Shader.Find("Universal Render Pipeline/Unlit")
+                ?? Shader.Find("Unlit/Color");
 
-            // Red X, green Y, blue Z - the convention every 3D tool uses, and
-            // deviating from it would be actively confusing.
+            handleMaterial = new Material(shader) { name = "GizmoHandle" };
+
+            // Red X, green Y, blue Z - the convention every 3D tool uses.
             CreateMoveHandle(Vector3.right, new Color(0.95f, 0.25f, 0.25f));
             CreateMoveHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateMoveHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
@@ -420,19 +443,19 @@ namespace VexDesigner.Parts
             root.transform.rotation = Quaternion.FromToRotation(Vector3.up, axis);
 
             AddPiece(root.transform, GizmoMeshes.Shaft(),
-                new Vector3(0f, 0f, 0f), new Vector3(0.03f, 0.8f, 0.03f), colour);
+                new Vector3(0f, 0.2f, 0f), new Vector3(0.03f, 0.6f, 0.03f), colour);
 
             AddPiece(root.transform, GizmoMeshes.Cone(),
                 new Vector3(0f, 0.8f, 0f), new Vector3(0.11f, 0.22f, 0.11f), colour);
 
-            // A single capsule covering the whole arm, rather than colliders on
-            // each piece: the arrow is thin, and a fiddly hit target defeats
-            // the purpose of a precision tool.
+            // Starts clear of the centre. A capsule running through the origin
+            // covers the part itself, so clicking the part hit an arrow instead
+            // - which is what made selection feel like it was grabbing.
             var collider = root.AddComponent<CapsuleCollider>();
             collider.direction = 1;
-            collider.height = 1.1f;
-            collider.radius = 0.09f;
-            collider.center = new Vector3(0f, 0.5f, 0f);
+            collider.height = 0.95f;
+            collider.radius = 0.085f;
+            collider.center = new Vector3(0f, 0.58f, 0f);
             collider.isTrigger = true;
 
             root.AddComponent<TransformHandle>()
@@ -443,17 +466,32 @@ namespace VexDesigner.Parts
         {
             var root = new GameObject($"Rotate_{axis}");
             root.transform.SetParent(rotateHandles, false);
-
-            // The torus is built in XZ, so its own axis is +Y.
             root.transform.rotation = Quaternion.FromToRotation(Vector3.up, axis);
 
+            const float radius = 0.75f;
             AddPiece(root.transform, GizmoMeshes.Torus(),
-                Vector3.zero, Vector3.one * 0.75f, colour);
+                Vector3.zero, Vector3.one * radius, colour);
 
-            var collider = root.AddComponent<MeshCollider>();
-            collider.sharedMesh = GizmoMeshes.Torus();
-            collider.convex = true;
-            collider.isTrigger = true;
+            // Boxes around the ring, not a convex mesh collider.
+            //
+            // The convex hull of a torus is a solid disc, so a convex collider
+            // would cover the whole centre - the part included - and swallow
+            // every click meant for the part underneath.
+            const int segments = 12;
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = (i / (float)segments) * Mathf.PI * 2f;
+                var segment = new GameObject($"Seg_{i}");
+                segment.transform.SetParent(root.transform, false);
+                segment.transform.localPosition =
+                    new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+                segment.transform.localRotation =
+                    Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+
+                var box = segment.AddComponent<BoxCollider>();
+                box.size = new Vector3(0.09f, 0.09f, (radius * 2f * Mathf.PI / segments) * 1.1f);
+                box.isTrigger = true;
+            }
 
             root.AddComponent<TransformHandle>()
                 .Configure(TransformHandle.Kind.Rotate, axis, colour);
@@ -476,7 +514,6 @@ namespace VexDesigner.Parts
 
             var block = new MaterialPropertyBlock();
             block.SetColor(Shader.PropertyToID("_BaseColor"), colour);
-            block.SetColor(Shader.PropertyToID("_EmissionColor"), colour * 0.25f);
             renderer.SetPropertyBlock(block);
         }
     }

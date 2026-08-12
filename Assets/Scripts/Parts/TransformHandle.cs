@@ -28,7 +28,6 @@ namespace VexDesigner.Parts
         private Renderer handleRenderer;
         private MaterialPropertyBlock block;
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
 
         public Kind HandleKind => handleKind;
 
@@ -69,9 +68,12 @@ namespace VexDesigner.Parts
                 return;
             }
 
+            // The overlay shader is unlit and exposes only a base colour, so
+            // the hover state brightens toward white rather than adding
+            // emission. Deliberately unlit: a handle that dims with the room
+            // lighting reads as an object in the scene rather than a control.
             handleRenderer.GetPropertyBlock(block);
-            block.SetColor(BaseColorId, on ? Color.Lerp(colour, Color.white, 0.55f) : colour);
-            block.SetColor(EmissionId, on ? colour * 1.4f : colour * 0.25f);
+            block.SetColor(BaseColorId, on ? Color.Lerp(colour, Color.white, 0.6f) : colour);
             handleRenderer.SetPropertyBlock(block);
         }
     }

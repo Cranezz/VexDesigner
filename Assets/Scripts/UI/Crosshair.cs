@@ -43,7 +43,12 @@ namespace VexDesigner.UI
             // "you are holding something that will not move" is the single
             // most useful thing to know at that moment.
             bool holdingFrozen = placement.IsCarrying && placement.CarriedIsFrozen;
-            bool interactive = !holdingFrozen && (placement.HasTarget || placement.IsCarrying);
+
+            // HasGrabTarget, not HasTarget: in transform mode, clicking a
+            // placed part selects it rather than picking it up, and showing a
+            // hand there would promise something the click does not do.
+            bool interactive = !holdingFrozen &&
+                (placement.HasGrabTarget || placement.IsCarrying);
 
             if (dot != null) { dot.enabled = !interactive && !holdingFrozen; }
             if (hand != null) { hand.enabled = interactive; }

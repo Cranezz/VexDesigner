@@ -67,6 +67,7 @@ namespace VexDesigner.Parts
         private InteractionLock interactionLock;
 
         private readonly RaycastHit[] hits = new RaycastHit[24];
+        private readonly Collider[] overlapBuffer = new Collider[16];
 
         private IWorkshopInteractable hovered;
 
@@ -86,6 +87,14 @@ namespace VexDesigner.Parts
         /// </summary>
         private Quaternion targetRotation = Quaternion.identity;
 
+        /// <summary>
+        /// Player heading last frame, so the carried part can be turned with
+        /// the body. Without this the part stays fixed in world space while
+        /// the player turns, which feels like it is floating on a stand rather
+        /// than being held.
+        /// </summary>
+        private float lastCarrierYaw;
+
         // Where the last raycast hit, so a click can grab by the exact point
         // the user aimed at rather than by the object's origin.
         private Vector3 lastHitPoint;
@@ -94,8 +103,49 @@ namespace VexDesigner.Parts
 
         public bool IsCarrying => carried != null;
 
-        /// <summary>True when a click would do something. Drives the hand cursor.</summary>
+        /// <summary>True when something interactable is under the crosshair.</summary>
         public bool HasTarget => hovered != null;
+
+        /// <summary>
+        /// Set by the transform tool while a gizmo handle is under the cursor,
+        /// so reaching for an axis does not also pick the part up.
+        /// </summary>
+        public bool SuppressInput { get; set; }
+
+        /// <summary>
+        /// True when clicking would put something in the user's hand. Drives
+        /// the hand cursor, so it must reflect what a click actually does -
+        /// in transform mode, clicking a placed part selects rather than grabs.
+        /// </summary>
+        public bool HasGrabTarget
+        {
+            get
+            {
+                if (hovered == null)
+                {
+                    return false;
+                }
+
+                bool transformActive = TransformTool != null && TransformTool.IsActive;
+                return !(transformActive && hovered is PickupHandle);
+            }
+        }
+
+        /// <summary>Sibling tool, if present. Cached lazily; may be null.</summary>
+        public TransformToolController TransformTool
+        {
+            get
+            {
+                if (transformTool == null)
+                {
+                    transformTool = GetComponent<TransformToolController>();
+                }
+
+                return transformTool;
+            }
+        }
+
+        private TransformToolController transformTool;
 
         public bool CarriedIsFrozen => carriedInstance != null && carriedInstance.IsFrozen;
 
@@ -121,6 +171,20 @@ namespace VexDesigner.Parts
         {
             if (pointer == null || pointer.IsOverInterface)
             {
+                return;
+            }
+
+            // A gizmo handle is under the cursor; the transform tool owns this
+            // click. Clear any stale hover so the crosshair does not keep
+            // showing a hand over a part that clicking will not pick up.
+            if (SuppressInput && !IsCarrying)
+            {
+                if (hovered != null)
+                {
+                    hovered.SetHovered(false);
+                    hovered = null;
+                }
+
                 return;
             }
 
@@ -242,6 +306,7 @@ namespace VexDesigner.Parts
             carryDistance = distance;
             grabLocalPoint = go.transform.InverseTransformPoint(grabWorldPoint);
             targetRotation = go.transform.rotation;
+            lastCarrierYaw = transform.eulerAngles.y;
 
             // A carried part stays a live physics body so it collides with the
             // bench and with other parts. Teleporting it to the aim point
@@ -263,6 +328,15 @@ namespace VexDesigner.Parts
                 carriedBody.useGravity = false;
                 carriedBody.linearVelocity = Vector3.zero;
                 carriedBody.angularVelocity = Vector3.zero;
+
+                // Rotate about the grabbed point rather than the part's middle.
+                //
+                // Physics always turns a body about its centre of mass, so
+                // moving the centre of mass to where the part was grabbed makes
+                // it pivot there - the same result as rotating about an
+                // arbitrary pivot, but through the solver rather than around
+                // it, so the rotation still collides.
+                carriedBody.centerOfMass = grabLocalPoint;
             }
 
             // The collider stays enabled so collision works; the aim ray skips
@@ -292,6 +366,8 @@ namespace VexDesigner.Parts
             // and would immediately lose sight of what is being rotated.
             interactionLock.CameraOrbitLocked = rotating || CarriedIsFrozen;
 
+            CarryWithBody();
+
             if (actions != null && actions.FreezePressed)
             {
                 ToggleFreezeCarried();
@@ -315,6 +391,34 @@ namespace VexDesigner.Parts
             if (pointer.PrimaryPressedThisFrame)
             {
                 Release();
+            }
+        }
+
+        /// <summary>
+        /// Turns the carried part with the player's body, so it stays oriented
+        /// the same way relative to them as they turn - the way something
+        /// actually held would.
+        /// </summary>
+        private void CarryWithBody()
+        {
+            float yaw = transform.eulerAngles.y;
+            float delta = Mathf.DeltaAngle(lastCarrierYaw, yaw);
+            lastCarrierYaw = yaw;
+
+            if (Mathf.Abs(delta) < 0.001f)
+            {
+                return;
+            }
+
+            Quaternion turn = Quaternion.AngleAxis(delta, Vector3.up);
+            targetRotation = turn * targetRotation;
+
+            // A pinned part has no live body to steer, so it is turned
+            // directly. Rotating it about the grab point keeps it under the
+            // aim rather than swinging away.
+            if (CarriedIsFrozen && carriedInstance?.Group != null)
+            {
+                RotateFrozenGroup(turn);
             }
         }
 
@@ -444,12 +548,76 @@ namespace VexDesigner.Parts
             // it through the solver, so the bench can refuse the rotation.
             targetRotation = delta * targetRotation;
 
-            // A frozen part has no live body to steer, so it is turned
-            // directly - it is pinned and cannot be pushed into anything.
+            // A frozen part is kinematic, so the solver will not steer it and
+            // it has to be turned directly - which means checking the result
+            // by hand, or it can be twisted straight into the bench.
             if (CarriedIsFrozen && carriedInstance?.Group != null)
             {
-                carriedInstance.Group.Rotate(delta, GrabWorldPoint);
+                RotateFrozenGroup(delta);
             }
+        }
+
+        /// <summary>
+        /// Turns a pinned assembly, undoing the turn if it would push the part
+        /// into something.
+        ///
+        /// A kinematic body is invisible to the contact solver, so nothing
+        /// stops it passing through the bench. Applying the rotation, testing
+        /// for overlap, and reverting on failure gives the same outcome the
+        /// solver would - the rotation simply stops at the surface - without
+        /// making the part dynamic again.
+        /// </summary>
+        private void RotateFrozenGroup(Quaternion delta)
+        {
+            PartGroup group = carriedInstance.Group;
+            Vector3 pivot = GrabWorldPoint;
+
+            group.Rotate(delta, pivot);
+
+            if (IsGroupOverlapping(group))
+            {
+                group.Rotate(Quaternion.Inverse(delta), pivot);
+            }
+        }
+
+        private bool IsGroupOverlapping(PartGroup group)
+        {
+            foreach (PartInstance part in group.Members)
+            {
+                var collider = part == null ? null : part.GetComponent<Collider>();
+                if (collider == null || !collider.enabled)
+                {
+                    continue;
+                }
+
+                Bounds bounds = collider.bounds;
+                int count = Physics.OverlapBoxNonAlloc(
+                    bounds.center, bounds.extents, overlapBuffer,
+                    Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+
+                for (int i = 0; i < count; i++)
+                {
+                    Collider other = overlapBuffer[i];
+                    if (other == collider || IsCarriedCollider(other))
+                    {
+                        continue;
+                    }
+
+                    // A bounds overlap is only a hint; ComputePenetration is
+                    // the exact test, and at these tolerances the difference
+                    // matters - parts routinely sit within a millimetre of each
+                    // other without actually intersecting.
+                    if (Physics.ComputePenetration(
+                            collider, collider.transform.position, collider.transform.rotation,
+                            other, other.transform.position, other.transform.rotation,
+                            out _, out float depth) && depth > 0.0004f)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private void WarnIfTryingToMove()
@@ -492,6 +660,11 @@ namespace VexDesigner.Parts
                 // Gravity back on, unless the part is pinned. It was only ever
                 // off so the part would hang where it was put while carried.
                 carriedBody.useGravity = !frozen;
+
+                // Centre of mass was moved to the grab point so the part would
+                // pivot there. Left shifted, a released part would topple in a
+                // way its real mass distribution never would.
+                carriedBody.ResetCenterOfMass();
 
                 if (frozen)
                 {

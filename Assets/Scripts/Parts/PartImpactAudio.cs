@@ -78,7 +78,7 @@ namespace VexDesigner.Parts
             // where every settling screw announces itself becomes tiring within
             // a minute, and the sound is there to make contact feel real rather
             // than to be noticed.
-            ImpactAudioPool.Play(clip, point, volume * 0.16f);
+            ImpactAudioPool.Play(clip, point, volume * 0.045f);
         }
 
         /// <summary>

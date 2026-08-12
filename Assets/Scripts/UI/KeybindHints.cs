@@ -65,13 +65,18 @@ namespace VexDesigner.UI
         {
             builder.Clear();
 
+            // Toggles name their *destination*, not the current state.
+            // "G: Grab" leaves the reader guessing whether that is where they
+            // are or where they would end up; an arrow removes the ambiguity.
             if (transformTool != null && transformTool.IsActive)
             {
-                Add("LMB", "Select / drag axis");
-                Add("R", "Rotate handles");
-                Add("Y", "Global / relative axes");
+                Add("LMB", "Select part / drag axis");
+                Add("R", "Hold for rotate handles");
+                Add("Y", transformTool.RelativeAxes
+                    ? "→ Global axes"
+                    : "→ Part-relative axes");
                 Add("Ctrl", "Precise");
-                Add("G", "Back to grab");
+                Add("G", "→ Grab mode");
                 Add("C", "Crouch");
                 return builder.ToString();
             }
@@ -104,7 +109,7 @@ namespace VexDesigner.UI
                 Add("LMB", "Pick up");
             }
 
-            Add("G", "Transform tool");
+            Add("G", "→ Transform tool");
             Add("C", "Crouch");
             return builder.ToString();
         }
