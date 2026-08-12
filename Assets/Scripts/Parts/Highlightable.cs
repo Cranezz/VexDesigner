@@ -32,10 +32,20 @@ namespace VexDesigner.Parts
 
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
+        [Tooltip("Colour shown while a part is pinned in mid-air. Distinct from " +
+                 "the hover colour so the two states are never confused.")]
+        [SerializeField] private Color pinnedColour = new Color(0.15f, 0.45f, 1f);
+
         private Renderer[] renderers;
         private MaterialPropertyBlock block;
         private float current;
         private float target;
+
+        /// <summary>
+        /// Persistent glow, independent of hover. Used to mark a frozen part,
+        /// which has to stay visibly marked when the cursor moves away.
+        /// </summary>
+        private bool pinned;
 
         /// <summary>
         /// When false, the object refuses to highlight. Used to signal "you
@@ -55,6 +65,22 @@ namespace VexDesigner.Parts
             target = (on && Interactable) ? 1f : 0f;
         }
 
+        /// <summary>
+        /// Marks the object as pinned in mid-air. Persists regardless of hover,
+        /// because the user needs to see at a glance which parts are anchored
+        /// without having to sweep the cursor over them.
+        /// </summary>
+        public void SetPinned(bool value)
+        {
+            if (pinned == value)
+            {
+                return;
+            }
+
+            pinned = value;
+            Apply();
+        }
+
         private void Update()
         {
             if (Mathf.Approximately(current, target))
@@ -71,7 +97,19 @@ namespace VexDesigner.Parts
 
         private void Apply()
         {
+            // Pinned is a floor, not a replacement: a pinned part still
+            // brightens on hover, so it stays clear that it can be interacted
+            // with rather than looking inert.
             Color emission = highlightColour * (intensity * current);
+
+            if (pinned)
+            {
+                Color pin = pinnedColour * (intensity * 0.55f);
+                emission = new Color(
+                    Mathf.Max(emission.r, pin.r),
+                    Mathf.Max(emission.g, pin.g),
+                    Mathf.Max(emission.b, pin.b));
+            }
 
             for (int i = 0; i < renderers.Length; i++)
             {

@@ -22,9 +22,20 @@ namespace VexDesigner.Player
         private const float InchesToMetres = 0.0254f;
 
         [Header("Body")]
-        [Tooltip("Eye height in inches. 66 in is roughly average standing eye " +
-                 "level and matters for VR comfort more than it looks.")]
-        [SerializeField] private float eyeHeightIn = 66f;
+        [Tooltip("Eye height in inches.\n\n" +
+                 "Set below real adult height (66 in) on purpose. VEX screws " +
+                 "are a quarter inch across and nearly invisible from a " +
+                 "standing adult's eyeline; a shorter viewpoint makes the whole " +
+                 "workshop read larger and the parts correspondingly bigger.\n\n" +
+                 "Note this trades against VR realism, where eye height should " +
+                 "match the wearer. Expect to revisit it when VR lands.")]
+        [SerializeField] private float eyeHeightIn = 50f;
+
+        [Tooltip("Eye height while crouched, in inches.")]
+        [SerializeField] private float crouchEyeHeightIn = 30f;
+
+        [Tooltip("Seconds to move between standing and crouched.")]
+        [SerializeField] private float crouchTransition = 0.14f;
 
         [Header("Look limits")]
         [SerializeField] private float minPitch = -85f;
@@ -42,8 +53,15 @@ namespace VexDesigner.Player
 
         private CharacterController controller;
         private ILookInput input;
+        private IActionInput actions;
         private float pitch;
         private float verticalVelocity;
+
+        private bool crouched;
+        private float currentEyeHeight;
+        private float eyeHeightVelocity;
+
+        public bool IsCrouched => crouched;
 
         /// <summary>Metres travelled horizontally this frame. Footsteps use it.</summary>
         public float DistanceTravelledThisFrame { get; private set; }
@@ -56,6 +74,8 @@ namespace VexDesigner.Player
         {
             controller = GetComponent<CharacterController>();
             input = GetComponentInChildren<ILookInput>();
+            actions = GetComponentInChildren<IActionInput>();
+            currentEyeHeight = eyeHeightIn;
 
             if (input == null)
             {
@@ -81,9 +101,39 @@ namespace VexDesigner.Player
             if (MovementEnabled)
             {
                 ApplyLook();
+
+                if (actions != null && actions.CrouchPressed)
+                {
+                    crouched = !crouched;
+                }
             }
 
+            ApplyCrouch();
             ApplyMovement();
+        }
+
+        /// <summary>
+        /// Eases the head between standing and crouched height.
+        ///
+        /// Only the camera moves; the collider is left at full height. That is
+        /// deliberate for now - shrinking the collider lets the player crouch
+        /// into geometry and then stand up inside it, which needs a headroom
+        /// check to do properly. Crouching here is for getting eye-level with
+        /// the bench, not for fitting through gaps.
+        /// </summary>
+        private void ApplyCrouch()
+        {
+            if (head == null)
+            {
+                return;
+            }
+
+            float targetHeight = crouched ? crouchEyeHeightIn : eyeHeightIn;
+
+            currentEyeHeight = Mathf.SmoothDamp(
+                currentEyeHeight, targetHeight, ref eyeHeightVelocity, crouchTransition);
+
+            head.localPosition = new Vector3(0f, currentEyeHeight * InchesToMetres, 0f);
         }
 
         private void ApplyLook()

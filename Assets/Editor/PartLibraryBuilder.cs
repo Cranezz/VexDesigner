@@ -155,6 +155,9 @@ namespace VexDesigner.EditorTools
             return weighed;
         }
 
+        /// <summary>Density of 6061 aluminium, grams per cubic centimetre.</summary>
+        private const float AluminiumDensity = 2.70f;
+
         private static bool TryApplyMass(PartDefinition definition, string key)
         {
             foreach (KeyValuePair<string, float> entry in MassGramsBySku)
@@ -166,7 +169,49 @@ namespace VexDesigner.EditorTools
                 }
             }
 
+            // No published figure: estimate from the mesh's own volume. Far
+            // better than a flat placeholder, since it at least scales with the
+            // part - a C-channel and a screw will not both come out at 100 g.
+            //
+            // Reported as unmeasured regardless, because it assumes solid
+            // aluminium and so overestimates anything hollow, plastic or steel.
+            float grams = EstimateMassGrams(definition.mesh);
+            if (grams > 0f)
+            {
+                definition.massGrams = grams;
+            }
+
             return false;
+        }
+
+        /// <summary>
+        /// Mesh volume by the signed-tetrahedron sum: each triangle forms a
+        /// tetrahedron with the origin, and the signed volumes cancel out
+        /// everywhere except the enclosed solid. Correct for any closed mesh
+        /// regardless of where the origin sits relative to it.
+        /// </summary>
+        private static float EstimateMassGrams(Mesh mesh)
+        {
+            if (mesh == null || !mesh.isReadable)
+            {
+                return 0f;
+            }
+
+            Vector3[] vertices = mesh.vertices;
+            int[] triangles = mesh.triangles;
+            double volume = 0.0;
+
+            for (int i = 0; i + 2 < triangles.Length; i += 3)
+            {
+                Vector3 a = vertices[triangles[i]];
+                Vector3 b = vertices[triangles[i + 1]];
+                Vector3 c = vertices[triangles[i + 2]];
+                volume += Vector3.Dot(a, Vector3.Cross(b, c)) / 6.0;
+            }
+
+            // Mesh units are metres. 1 m3 is 1e6 cm3.
+            double cubicCentimetres = System.Math.Abs(volume) * 1e6;
+            return (float)(cubicCentimetres * AluminiumDensity);
         }
 
         private static string Prettify(string key)

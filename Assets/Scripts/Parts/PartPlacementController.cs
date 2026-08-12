@@ -4,28 +4,39 @@ namespace VexDesigner.Parts
     using VexDesigner.InputSources;
 
     /// <summary>
-    /// Drives every world interaction: taking parts from the shelf, carrying
-    /// them, rotating them, setting them down, and picking placed ones back up.
+    /// Drives world interaction: taking parts from the shelf, carrying them at
+    /// arm's length, rotating, freezing, and setting them down.
     ///
-    /// A deliberate two-state machine - idle or carrying - rather than a drag
-    /// gesture. Click to pick up, click again to drop. Holding a button down
-    /// through a long placement is tiring, and more importantly has no natural
-    /// VR equivalent, whereas "grab, move, release" maps straight onto a
-    /// controller trigger later.
+    /// A part is carried at a distance out along the aim ray, not snapped to a
+    /// surface. Surface snapping made it impossible to hold anything above the
+    /// bench, or to assemble a robot in the air - which is exactly what you do
+    /// when building one. The scroll wheel pushes the part away or draws it in.
+    ///
+    /// Click to pick up, click again to drop: a two-state machine rather than a
+    /// held-button drag. Holding a button through a long placement is tiring
+    /// and has no natural VR equivalent, whereas "grab, move, release" maps
+    /// straight onto a controller trigger.
     /// </summary>
     public sealed class PartPlacementController : MonoBehaviour
     {
         [Tooltip("How far the aim ray reaches, in world units.")]
         [SerializeField] private float aimDistance = 12f;
 
-        [Tooltip("Gap left between a part and the surface when set down, so " +
-                 "physics starts from a clean non-overlapping state.")]
-        [SerializeField] private float placementClearance = 0.0015f;
+        [Header("Carry")]
+        [SerializeField] private float minCarryDistance = 0.3f;
+        [SerializeField] private float maxCarryDistance = 2.5f;
+        [SerializeField] private float defaultCarryDistance = 0.85f;
 
-        [Tooltip("Degrees of rotation per pixel of right-drag.")]
-        [SerializeField] private float rotationDegreesPerPixel = 0.5f;
+        [Tooltip("Fraction of the current distance moved per scroll notch, so " +
+                 "the same flick feels right whether the part is close or far.")]
+        [SerializeField] private float carryZoomFraction = 0.13f;
+
+        [Header("Rotation")]
+        [SerializeField] private float rotationDegreesPerPixel = 0.45f;
 
         private IPointerInput pointer;
+        private ILookInput look;
+        private IActionInput actions;
         private InteractionLock interactionLock;
 
         private readonly RaycastHit[] hits = new RaycastHit[24];
@@ -35,33 +46,35 @@ namespace VexDesigner.Parts
         private GameObject carried;
         private PartDefinition carriedDefinition;
         private Collider carriedCollider;
-        private Renderer carriedRenderer;
         private Rigidbody carriedBody;
+        private PartInstance carriedInstance;
+        private float carryDistance;
 
         public bool IsCarrying => carried != null;
 
-        /// <summary>
-        /// True when something interactable is under the crosshair. Drives the
-        /// hand cursor, so it has to reflect what a click would actually do.
-        /// </summary>
+        /// <summary>True when a click would do something. Drives the hand cursor.</summary>
         public bool HasTarget => hovered != null;
+
+        /// <summary>Whether the carried assembly is currently pinned.</summary>
+        public bool CarriedIsFrozen =>
+            carriedInstance != null && carriedInstance.IsFrozen;
 
         private void Awake()
         {
             pointer = GetComponentInChildren<IPointerInput>();
+            look = GetComponentInChildren<ILookInput>();
+            actions = GetComponentInChildren<IActionInput>();
+
             if (pointer == null)
             {
                 Debug.LogError(
                     $"{nameof(PartPlacementController)} found no {nameof(IPointerInput)}. " +
-                    "Add a MousePointerInput component. Interaction is disabled.",
+                    "Add a FirstPersonInput component. Interaction is disabled.",
                     this);
             }
 
-            interactionLock = GetComponent<InteractionLock>();
-            if (interactionLock == null)
-            {
-                interactionLock = gameObject.AddComponent<InteractionLock>();
-            }
+            interactionLock = GetComponent<InteractionLock>()
+                ?? gameObject.AddComponent<InteractionLock>();
         }
 
         private void Update()
@@ -88,7 +101,6 @@ namespace VexDesigner.Parts
         private void UpdateIdle()
         {
             var target = RaycastFor<IWorkshopInteractable>(out _);
-
             if (target != null && !target.Interactable)
             {
                 target = null;
@@ -101,6 +113,24 @@ namespace VexDesigner.Parts
                 hovered?.SetHovered(true);
             }
 
+            // A pinned part can be rotated and released without picking it up,
+            // so an anchored sub-assembly can be adjusted in place.
+            PartInstance frozen = FrozenUnderCursor();
+            bool rotatingFrozen = frozen != null && pointer.SecondaryHeld;
+            interactionLock.CameraOrbitLocked = rotatingFrozen;
+
+            if (rotatingFrozen)
+            {
+                RotateGroup(frozen.Group, pointer.DragDelta);
+                return;
+            }
+
+            if (frozen != null && actions != null && actions.FreezePressed)
+            {
+                frozen.Group.SetFrozen(false);
+                return;
+            }
+
             if (hovered != null && pointer.PrimaryPressedThisFrame)
             {
                 // The click may destroy the hovered object - paging the shelf
@@ -110,6 +140,12 @@ namespace VexDesigner.Parts
                 hovered = null;
                 clicked.OnPrimaryClick(this);
             }
+        }
+
+        private PartInstance FrozenUnderCursor()
+        {
+            var instance = RaycastFor<PartInstance>(out _);
+            return instance != null && instance.IsFrozen ? instance : null;
         }
 
         // ------------------------------------------------------------------
@@ -128,11 +164,11 @@ namespace VexDesigner.Parts
             GameObject go = PartFactory.Create(definition, withPhysics: false);
             if (go != null)
             {
-                AttachToHand(go, definition);
+                AttachToHand(go, definition, defaultCarryDistance);
             }
         }
 
-        /// <summary>Picks up a part that is already on the table.</summary>
+        /// <summary>Picks up a part that is already in the world.</summary>
         public void BeginCarryExisting(GameObject existing)
         {
             if (existing == null)
@@ -141,18 +177,31 @@ namespace VexDesigner.Parts
             }
 
             var instance = existing.GetComponent<PartInstance>();
-            AttachToHand(existing, instance != null ? instance.Definition : null);
+
+            // Picking a pinned part up releases the pin: the user has clearly
+            // decided to move it, and making them unfreeze first would be a
+            // pointless extra step.
+            instance?.Group?.SetFrozen(false);
+
+            // Keep it at the distance it already is, so it does not jump toward
+            // or away from the player the instant it is grabbed.
+            float distance = Vector3.Distance(pointer.AimRay.origin, existing.transform.position);
+
+            AttachToHand(
+                existing,
+                instance != null ? instance.Definition : null,
+                Mathf.Clamp(distance, minCarryDistance, maxCarryDistance));
         }
 
-        private void AttachToHand(GameObject go, PartDefinition definition)
+        private void AttachToHand(GameObject go, PartDefinition definition, float distance)
         {
             carried = go;
             carriedDefinition = definition;
-            carriedRenderer = go.GetComponentInChildren<Renderer>();
+            carriedInstance = go.GetComponent<PartInstance>();
+            carryDistance = distance;
 
-            // Physics off while carried: the part follows the cursor, and a
-            // live Rigidbody fighting that produces jitter and stray
-            // collisions with whatever it passes over.
+            // Physics off while carried: the part follows the aim, and a live
+            // Rigidbody fighting that produces jitter and stray collisions.
             carriedBody = go.GetComponent<Rigidbody>();
             if (carriedBody != null)
             {
@@ -162,7 +211,7 @@ namespace VexDesigner.Parts
             }
 
             // The carried collider must not block the aim ray, or the part
-            // would permanently obstruct the surface it is trying to land on.
+            // would permanently obstruct whatever is behind it.
             carriedCollider = go.GetComponent<Collider>();
             if (carriedCollider != null)
             {
@@ -176,80 +225,116 @@ namespace VexDesigner.Parts
         {
             bool rotating = pointer.SecondaryHeld;
 
-            // Claim the orbit gesture so right-drag turns the part instead of
-            // the camera. Released the moment the button is.
+            // Claim the look gesture so right-drag turns the part instead of
+            // the head. Without this both move at once and the rotation is
+            // impossible to aim.
             interactionLock.CameraOrbitLocked = rotating;
+
+            if (actions != null && actions.FreezePressed)
+            {
+                ToggleFreezeCarried();
+                return;
+            }
 
             if (rotating)
             {
-                RotateCarried(pointer.DragDelta);
+                RotateGroup(carriedInstance?.Group, pointer.DragDelta);
             }
-            else
+            else if (!CarriedIsFrozen)
             {
-                FollowSurface();
+                AdjustCarryDistance();
+                FollowAim();
             }
 
-            if (pointer.PrimaryPressedThisFrame && HasValidDrop(out _))
+            if (pointer.PrimaryPressedThisFrame)
             {
                 Place();
             }
         }
 
-        private void RotateCarried(Vector2 drag)
+        private void AdjustCarryDistance()
         {
-            // Yaw about world up so the part stays level as it turns; pitch
-            // about the camera's right so tilting matches the drag direction.
-            float yaw = drag.x * rotationDegreesPerPixel;
-            float pitch = -drag.y * rotationDegreesPerPixel;
-
-            carried.transform.Rotate(Vector3.up, yaw, Space.World);
-
-            Camera cam = Camera.main;
-            Vector3 pitchAxis = cam != null ? cam.transform.right : Vector3.right;
-            carried.transform.Rotate(pitchAxis, pitch, Space.World);
-        }
-
-        private void FollowSurface()
-        {
-            if (!HasValidDrop(out RaycastHit hit))
+            float scroll = look?.ZoomDelta ?? 0f;
+            if (Mathf.Approximately(scroll, 0f))
             {
                 return;
             }
 
-            Transform t = carried.transform;
-            t.position = new Vector3(hit.point.x, t.position.y, hit.point.z);
+            // Proportional, so a notch feels the same whether the part is at
+            // arm's length or across the room.
+            carryDistance = Mathf.Clamp(
+                carryDistance * (1f + (scroll * carryZoomFraction)),
+                minCarryDistance,
+                maxCarryDistance);
+        }
 
-            // Rest the part's lowest *rendered* point on the surface. Mesh
-            // bounds alone would be wrong once the part has been rotated, and
-            // a CAD mesh's origin is wherever the modeller left it anyway.
-            if (carriedRenderer != null)
+        private void FollowAim()
+        {
+            Ray ray = pointer.AimRay;
+            carried.transform.position = ray.origin + (ray.direction * carryDistance);
+        }
+
+        private void RotateGroup(PartGroup group, Vector2 drag)
+        {
+            if (group == null)
             {
-                float lift = hit.point.y - carriedRenderer.bounds.min.y + placementClearance;
-                t.position += new Vector3(0f, lift, 0f);
+                return;
+            }
+
+            // Yaw about world up keeps the part level as it turns; pitch about
+            // the camera's right makes tilt follow the drag direction.
+            Camera cam = Camera.main;
+            Vector3 pitchAxis = cam != null ? cam.transform.right : Vector3.right;
+
+            Quaternion delta =
+                Quaternion.AngleAxis(drag.x * rotationDegreesPerPixel, Vector3.up) *
+                Quaternion.AngleAxis(-drag.y * rotationDegreesPerPixel, pitchAxis);
+
+            group.Rotate(delta, group.GetCentre());
+        }
+
+        private void ToggleFreezeCarried()
+        {
+            PartGroup group = carriedInstance?.Group;
+            if (group == null)
+            {
+                return;
+            }
+
+            group.SetFrozen(!group.IsFrozen);
+
+            if (group.IsFrozen)
+            {
+                // Pinning hands the part back to the world but leaves it where
+                // it is, so an assembly can be built in mid-air.
+                Release(keepKinematic: true);
             }
         }
 
-        private bool HasValidDrop(out RaycastHit hit)
+        private void Place()
         {
-            return RaycastFor<PlacementSurface>(out hit) != null;
+            Release(keepKinematic: CarriedIsFrozen);
         }
 
-        private void Place()
+        private void Release(bool keepKinematic)
         {
             if (carriedCollider != null)
             {
                 carriedCollider.enabled = true;
             }
 
-            // Physics takes over: the part settles onto whatever is beneath it
-            // rather than hovering at exactly the drop height.
             if (carriedBody != null)
             {
-                carriedBody.isKinematic = false;
+                carriedBody.isKinematic = keepKinematic;
             }
             else if (carriedDefinition != null)
             {
                 PartFactory.AddPhysics(carried, carriedDefinition);
+                var body = carried.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.isKinematic = keepKinematic;
+                }
             }
 
             GameObject placed = carried;
@@ -257,13 +342,13 @@ namespace VexDesigner.Parts
 
             carried = null;
             carriedCollider = null;
-            carriedRenderer = null;
             carriedBody = null;
+            carriedInstance = null;
             carriedDefinition = null;
 
             interactionLock.CameraOrbitLocked = false;
 
-            if (definition != null)
+            if (definition != null && placed != null)
             {
                 var instance = placed.GetComponent<PartInstance>();
                 placed.name = instance != null
@@ -273,7 +358,7 @@ namespace VexDesigner.Parts
 
             // Alt held: keep going with another of the same part, so a run of
             // identical parts does not mean a return trip to the shelf.
-            if (pointer.RepeatModifierHeld && definition != null)
+            if (!keepKinematic && pointer.RepeatModifierHeld && definition != null)
             {
                 BeginCarryNew(definition);
             }
@@ -289,7 +374,6 @@ namespace VexDesigner.Parts
 
         /// <summary>
         /// Nearest object along the aim ray carrying <typeparamref name="T"/>.
-        ///
         /// RaycastNonAlloc avoids allocating a hit array every frame, which at
         /// 60fps is otherwise a steady drip of garbage.
         /// </summary>
@@ -325,9 +409,9 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Turns every interactable in the scene on or off. While carrying,
-        /// nothing highlights and nothing responds - that silence is how the
-        /// user is told the only available action is to put the part down.
+        /// Turns every interactable on or off. While carrying, nothing
+        /// highlights and nothing responds - that silence is how the user is
+        /// told the only available action is to put the part down.
         /// </summary>
         private void SetWorldInteractable(bool value)
         {

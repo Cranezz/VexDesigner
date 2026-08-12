@@ -25,10 +25,32 @@ namespace VexDesigner.Parts
 
         private static int nextInstanceId = 1;
 
+        /// <summary>
+        /// The assembly this part belongs to. Every part starts in a group of
+        /// one; screwing parts together will merge their groups. Freezing and
+        /// selection act on the group, never the individual part.
+        /// </summary>
+        public PartGroup Group { get; private set; }
+
+        public bool IsFrozen => Group != null && Group.IsFrozen;
+
         public void Initialise(PartDefinition partDefinition)
         {
             definition = partDefinition;
             InstanceId = nextInstanceId++;
+            Group = PartGroup.CreateFor(this);
+        }
+
+        internal void AssignGroup(PartGroup group)
+        {
+            Group = group;
+        }
+
+        private void Awake()
+        {
+            // A part restored from a saved scene never had Initialise called,
+            // so it would otherwise have no group and silently ignore freezing.
+            Group ??= PartGroup.CreateFor(this);
         }
     }
 }

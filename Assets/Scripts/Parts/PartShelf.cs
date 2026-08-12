@@ -197,7 +197,9 @@ namespace VexDesigner.Parts
         {
             if (pageLabel != null)
             {
-                pageLabel.text = $"Page {currentPage + 1} / {Mathf.Max(1, pageCount)}";
+                // Just "2/5". The word "Page" is obvious from the arrows either
+                // side of it and only makes the label bigger.
+                pageLabel.text = $"{currentPage + 1}/{Mathf.Max(1, pageCount)}";
             }
         }
 

@@ -292,15 +292,18 @@ namespace VexDesigner.EditorTools
             go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
             var text = go.AddComponent<TMPro.TextMeshPro>();
-            text.text = "Page 1 / 1";
-            text.fontSize = 1.2f;
+            text.text = "1/1";
+
+            // World-space TMP sizes in world units, so this is a physical
+            // height on the bench, not a screen size. Roughly 1 inch tall.
+            text.fontSize = 0.32f;
             text.alignment = TMPro.TextAlignmentOptions.Center;
             text.color = new Color(0.92f, 0.93f, 0.95f);
 
             var rect = go.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(In(12f), In(3f));
+                rect.sizeDelta = new Vector2(In(6f), In(2f));
             }
 
             shelf.AttachLabel(text);
@@ -395,6 +398,8 @@ namespace VexDesigner.EditorTools
             hand.GetComponent<Image>().sprite = Crosshair.GetHandSprite();
             hand.GetComponent<Image>().enabled = false;
 
+            BuildKeybindHints(canvasGo.transform);
+
             var crosshair = canvasGo.AddComponent<Crosshair>();
             var so = new SerializedObject(crosshair);
             so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
@@ -409,6 +414,31 @@ namespace VexDesigner.EditorTools
                 events.AddComponent<UnityEngine.EventSystems.EventSystem>();
                 events.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
             }
+        }
+
+        private static void BuildKeybindHints(Transform parent)
+        {
+            var go = new GameObject("KeybindHints", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+
+            // Anchored to the bottom-right corner so it stays put across
+            // resolutions rather than drifting with the canvas centre.
+            rect.anchorMin = new Vector2(1f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(1f, 0f);
+            rect.anchoredPosition = new Vector2(-28f, 24f);
+            rect.sizeDelta = new Vector2(420f, 200f);
+
+            var text = go.AddComponent<TMPro.TextMeshProUGUI>();
+            text.fontSize = 20f;
+            text.alignment = TMPro.TextAlignmentOptions.BottomRight;
+            text.color = new Color(0.88f, 0.90f, 0.93f, 0.85f);
+            text.raycastTarget = false;
+            text.richText = true;
+
+            go.AddComponent<KeybindHints>();
         }
 
         private static GameObject CreateHudImage(Transform parent, string name, float size)
