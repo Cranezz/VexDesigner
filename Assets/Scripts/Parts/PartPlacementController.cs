@@ -37,7 +37,15 @@ namespace VexDesigner.Parts
         [Header("Rotation")]
         [SerializeField] private float rotationDegreesPerPixel = 0.45f;
         [SerializeField] private bool invertRotateYaw;
-        [SerializeField] private bool invertRotatePitch;
+
+        [Tooltip("Pitch only. Yaw reads correctly as-is; vertical drag did not.")]
+        [SerializeField] private bool invertRotatePitch = true;
+
+        [Tooltip("Fastest the carried part will turn, in degrees per second. " +
+                 "Rotation is driven through the physics solver so it collides, " +
+                 "and an uncapped rate would let it spin through the bench " +
+                 "between steps for the same reason fast movement used to.")]
+        [SerializeField] private float maxAngularSpeed = 540f;
 
         [Header("Carry physics")]
         [Tooltip("How hard the part chases the aim point, per second. Higher " +
@@ -71,6 +79,12 @@ namespace VexDesigner.Parts
         /// <summary>Grabbed point, in the carried part's local space.</summary>
         private Vector3 grabLocalPoint;
         private float carryDistance;
+
+        /// <summary>
+        /// Orientation the part is being steered toward. Drag moves this, and
+        /// the solver decides how much of it the world actually allows.
+        /// </summary>
+        private Quaternion targetRotation = Quaternion.identity;
 
         // Where the last raycast hit, so a click can grab by the exact point
         // the user aimed at rather than by the object's origin.
@@ -227,6 +241,7 @@ namespace VexDesigner.Parts
             carriedInstance = go.GetComponent<PartInstance>();
             carryDistance = distance;
             grabLocalPoint = go.transform.InverseTransformPoint(grabWorldPoint);
+            targetRotation = go.transform.rotation;
 
             // A carried part stays a live physics body so it collides with the
             // bench and with other parts. Teleporting it to the aim point
@@ -339,14 +354,56 @@ namespace VexDesigner.Parts
         /// </summary>
         private void FixedUpdate()
         {
-            if (!IsCarrying || carriedBody == null || CarriedIsFrozen)
+            if (!IsCarrying || carriedBody == null || CarriedIsFrozen || pointer == null)
             {
                 return;
             }
 
-            if (pointer == null || pointer.SecondaryHeld)
+            DriveRotation();
+            DriveposIfNotRotating();
+        }
+
+        /// <summary>
+        /// Turns the part toward its target orientation using angular velocity.
+        ///
+        /// Assigning the rotation directly is what let parts be twisted into
+        /// the bench: a transform write skips the solver entirely, so nothing
+        /// ever objects to the resulting overlap and the part only squeezes
+        /// itself out afterwards. Driving the rotation as velocity means the
+        /// same contact solver that stops linear movement also stops turning.
+        /// </summary>
+        private void DriveRotation()
+        {
+            Quaternion delta = targetRotation * Quaternion.Inverse(carriedBody.rotation);
+            delta.ToAngleAxis(out float angle, out Vector3 axis);
+
+            // ToAngleAxis returns 0..360; past 180 the short way round is the
+            // other direction.
+            if (angle > 180f)
             {
-                // Hold position while rotating.
+                angle -= 360f;
+            }
+
+            // A near-zero rotation gives a meaningless axis, sometimes with
+            // infinities in it, which would poison the rigidbody.
+            if (Mathf.Abs(angle) < 0.05f || float.IsNaN(axis.x) || float.IsInfinity(axis.x))
+            {
+                carriedBody.angularVelocity = Vector3.zero;
+                return;
+            }
+
+            float degreesPerSecond = Mathf.Clamp(
+                angle / Time.fixedDeltaTime, -maxAngularSpeed, maxAngularSpeed);
+
+            carriedBody.angularVelocity =
+                axis.normalized * (degreesPerSecond * Mathf.Deg2Rad);
+        }
+
+        private void DriveposIfNotRotating()
+        {
+            if (pointer.SecondaryHeld)
+            {
+                // Hold position while rotating, so the part turns in place.
                 carriedBody.linearVelocity = Vector3.zero;
                 return;
             }
@@ -360,10 +417,6 @@ namespace VexDesigner.Parts
 
             carriedBody.linearVelocity = Vector3.ClampMagnitude(
                 delta * followStrength, maxCarrySpeed);
-
-            // Collisions would otherwise set the part tumbling out of the
-            // user's control.
-            carriedBody.angularVelocity = Vector3.zero;
         }
 
         /// <summary>
@@ -387,27 +440,15 @@ namespace VexDesigner.Parts
                 Quaternion.AngleAxis(drag.x * rate * yawSign, Vector3.up) *
                 Quaternion.AngleAxis(drag.y * rate * pitchSign, pitchAxis);
 
-            // Pivot on the grabbed point, so the part turns about where it is
-            // held rather than swinging around a distant origin.
-            Vector3 pivot = GrabWorldPoint;
+            // Only the *target* moves here. FixedUpdate drives the body toward
+            // it through the solver, so the bench can refuse the rotation.
+            targetRotation = delta * targetRotation;
 
-            if (carriedInstance?.Group != null)
+            // A frozen part has no live body to steer, so it is turned
+            // directly - it is pinned and cannot be pushed into anything.
+            if (CarriedIsFrozen && carriedInstance?.Group != null)
             {
-                carriedInstance.Group.Rotate(delta, pivot);
-            }
-            else
-            {
-                Transform t = carried.transform;
-                t.rotation = delta * t.rotation;
-                t.position = pivot + (delta * (t.position - pivot));
-            }
-
-            // Rotation is applied to the transform directly, which a live
-            // Rigidbody would otherwise fight on the next physics step.
-            if (carriedBody != null && !carriedBody.isKinematic)
-            {
-                carriedBody.linearVelocity = Vector3.zero;
-                carriedBody.angularVelocity = Vector3.zero;
+                carriedInstance.Group.Rotate(delta, GrabWorldPoint);
             }
         }
 

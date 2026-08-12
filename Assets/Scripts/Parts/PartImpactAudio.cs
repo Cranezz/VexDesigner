@@ -74,7 +74,11 @@ namespace VexDesigner.Parts
                 ? collision.GetContact(0).point
                 : transform.position;
 
-            ImpactAudioPool.Play(clip, point, volume * 0.7f);
+            // Deliberately quiet. These are texture, not events - a workshop
+            // where every settling screw announces itself becomes tiring within
+            // a minute, and the sound is there to make contact feel real rather
+            // than to be noticed.
+            ImpactAudioPool.Play(clip, point, volume * 0.16f);
         }
 
         /// <summary>

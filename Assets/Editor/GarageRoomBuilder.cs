@@ -1,6 +1,7 @@
 namespace VexDesigner.EditorTools
 {
     using UnityEngine;
+    using VexDesigner.Parts;
 
     /// <summary>
     /// Builds the garage the workshop sits in.
@@ -215,6 +216,44 @@ namespace VexDesigner.EditorTools
             }
 
             BuildPegboard(bench, z);
+            BuildClearButton(bench);
+        }
+
+        /// <summary>
+        /// Wall button beside the tool board that sweeps parts off the floor.
+        ///
+        /// Placed on the wall rather than in a menu because it is a workshop
+        /// action, and because a physical control can be reached by hand in VR
+        /// later without being redesigned as a UI panel.
+        /// </summary>
+        private static void BuildClearButton(GameObject parent)
+        {
+            float z = (RoomDepthIn * 0.5f) - 3.2f;
+            const float x = 58f;
+            const float y = BenchHeightIn + 22f;
+
+            var mount = new GameObject("ClearPartsButton");
+            mount.transform.SetParent(parent.transform, false);
+
+            Box(mount, "Plate",
+                new Vector3(x, y, z),
+                new Vector3(9f, 9f, 1.2f),
+                WorkshopMaterials.Steel, 9f, 9f);
+
+            // The button proper: proud of the plate, and the only part with a
+            // collider, so aiming at it is unambiguous.
+            GameObject button = Box(mount, "Button",
+                new Vector3(x, y, z - 1.4f),
+                new Vector3(5.5f, 5.5f, 2.2f),
+                WorkshopMaterials.CabinetBlue, 5.5f, 5.5f);
+
+            button.isStatic = false;
+            button.AddComponent<Highlightable>();
+            button.AddComponent<ClearDroppedPartsButton>();
+
+            // Plate is decoration only; leaving its collider live would let the
+            // user aim at the frame and wonder why nothing happened.
+            mount.transform.Find("Plate").GetComponent<Collider>().enabled = false;
         }
 
         private static void BuildPegboard(GameObject parent, float benchZ)

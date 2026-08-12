@@ -21,6 +21,7 @@ namespace VexDesigner.UI
     {
         [SerializeField] private TextMeshProUGUI label;
         [SerializeField] private PartPlacementController placement;
+        [SerializeField] private TransformToolController transformTool;
 
         private readonly StringBuilder builder = new StringBuilder(256);
         private string lastText = string.Empty;
@@ -30,6 +31,11 @@ namespace VexDesigner.UI
             if (placement == null)
             {
                 placement = FindAnyObjectByType<PartPlacementController>();
+            }
+
+            if (transformTool == null)
+            {
+                transformTool = FindAnyObjectByType<TransformToolController>();
             }
 
             if (label == null)
@@ -59,6 +65,17 @@ namespace VexDesigner.UI
         {
             builder.Clear();
 
+            if (transformTool != null && transformTool.IsActive)
+            {
+                Add("LMB", "Select / drag axis");
+                Add("R", "Rotate handles");
+                Add("Y", "Global / relative axes");
+                Add("Ctrl", "Precise");
+                Add("G", "Back to grab");
+                Add("C", "Crouch");
+                return builder.ToString();
+            }
+
             if (placement == null)
             {
                 return string.Empty;
@@ -87,6 +104,7 @@ namespace VexDesigner.UI
                 Add("LMB", "Pick up");
             }
 
+            Add("G", "Transform tool");
             Add("C", "Crouch");
             return builder.ToString();
         }

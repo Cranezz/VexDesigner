@@ -374,6 +374,11 @@ namespace VexDesigner.EditorTools
             player.AddComponent<InteractionLock>();
             player.AddComponent<PartPlacementController>();
 
+            // The precision alternative to grabbing. Only one of the two is
+            // enabled at a time - they cannot share the primary click - and G
+            // swaps between them.
+            player.AddComponent<TransformToolController>();
+
             // Spawn point is baked in rather than read back from the room
             // builder at runtime, because that builder is editor-only code and
             // does not exist in a real build.
