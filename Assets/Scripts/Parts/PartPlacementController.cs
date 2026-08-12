@@ -40,6 +40,12 @@ namespace VexDesigner.Parts
 
         public bool IsCarrying => carried != null;
 
+        /// <summary>
+        /// True when something interactable is under the crosshair. Drives the
+        /// hand cursor, so it has to reflect what a click would actually do.
+        /// </summary>
+        public bool HasTarget => hovered != null;
+
         private void Awake()
         {
             pointer = GetComponentInChildren<IPointerInput>();

@@ -5,58 +5,47 @@ namespace VexDesigner.EditorTools
     using UnityEditor.SceneManagement;
     using UnityEngine;
     using UnityEngine.SceneManagement;
-    using VexDesigner.CameraControl;
+    using UnityEngine.UI;
     using VexDesigner.InputSources;
     using VexDesigner.Parts;
+    using VexDesigner.Player;
+    using VexDesigner.UI;
 
     /// <summary>
-    /// Builds the phase-1 workshop scene from code.
+    /// Builds the whole playable scene from code: the garage, the workbench,
+    /// the parts shelf, the player, and the on-screen crosshair.
     ///
     /// Generating the scene rather than hand-placing it means the layout is
     /// reviewable in a diff, reproducible after a bad merge, and self-
-    /// documenting about *why* things are the size they are. Unity scene files
+    /// documenting about why things are the size they are. Unity scene files
     /// are YAML blobs nobody can read, so a hand-built scene is effectively
     /// undocumented.
     ///
-    /// UNITS. Everything in this file is authored in **inches**, because that
-    /// is what VEX parts are specified in and what the build rules are written
-    /// in. Inches are converted to metres exactly once, at the point of use,
-    /// via <see cref="In"/>.
+    /// UNITS. Everything here is authored in inches, because that is what VEX
+    /// parts and building rules are specified in. Inches convert to metres
+    /// exactly once, at point of use, via <see cref="In"/>.
     ///
-    /// World space remains 1 unit = 1 metre. This is not negotiable: Unity's
-    /// physics solver and every OpenXR runtime assume it, and a project built
-    /// at 1 unit = 1 inch has hands roughly forty times the wrong size the
-    /// moment a headset is attached. Authoring in inches while storing metres
-    /// gives both - see docs/ARCHITECTURE.md section 1.
+    /// World space stays 1 unit = 1 metre. Unity's physics and every OpenXR
+    /// runtime assume it, and a project built at 1 unit = 1 inch has hands
+    /// forty times the wrong size the moment a headset is attached.
     /// </summary>
     public static class WorkshopSceneBuilder
     {
         private const string ScenesFolder = "Assets/Scenes";
-        private const string MaterialsFolder = "Assets/Materials";
         private const string TexturesFolder = "Assets/Textures";
         private const string ScenePath = ScenesFolder + "/Workshop.unity";
 
         private const float InchesToMetres = 0.0254f;
 
         // --- Build area -------------------------------------------------
-        // VEX games size robots at 18" cubed, expanding to 24" in most
-        // seasons. The mat is deliberately larger than the expanded limit in
-        // both directions so a fully expanded robot still has working room
-        // around it rather than hanging over the edge.
+        // VEX games size robots at 18 in cubed, expanding to 24 in in most
+        // seasons. The mat is larger than the expanded limit in both
+        // directions so a fully expanded robot still has working room.
         private const float MatWidthIn = 36f;
         private const float MatDepthIn = 30f;
         private const float MatThicknessIn = 0.12f;
 
-        // The mat texture tiles once every six inches and carries a one-inch
-        // grid. Six divides evenly into both mat dimensions, so no grid square
-        // is ever clipped. Changing the mat size to a non-multiple of six will
-        // produce a partial square at the edge.
-        private const float MatInchesPerTextureTile = 6f;
-
-        // --- Table ------------------------------------------------------
-        // Standard workbench proportions. Height matters for VR: a bench at
-        // the wrong height is immediately and uncomfortably obvious in a
-        // headset in a way it never is on a monitor.
+        // --- Work table -------------------------------------------------
         private const float TableWidthIn = 72f;
         private const float TableDepthIn = 36f;
         private const float TableHeightIn = 36f;
@@ -64,17 +53,16 @@ namespace VexDesigner.EditorTools
         private const float LegThicknessIn = 3f;
         private const float LegInsetIn = 4f;
 
-        private const float FloorSizeIn = 480f;
+        // Table sits toward the middle of the garage, clear of both benches.
+        private const float TableCentreZIn = -10f;
 
-        // Shelf occupies the left of the bench, clear of the mat. The mat spans
-        // -18 to +18 in X, so a 16 in shelf centred here occupies -34 to -18.
-        //
+        // --- Parts shelf ------------------------------------------------
         // Deeper than wide on purpose: a 35-hole C-channel is 17.5 in long and
-        // has to lie down inside the region, so the long axis runs front to
-        // back where there is room for it.
-        private const float ShelfCentreXIn = -26f;
+        // has to lie down inside the region, so its long axis runs front to
+        // back where there is room.
         private const float ShelfWidthIn = 16f;
         private const float ShelfDepthIn = 30f;
+        private static float ShelfCentreXIn => -(TableWidthIn * 0.5f) - 12f;
 
         private static float In(float inches) => inches * InchesToMetres;
 
@@ -110,7 +98,7 @@ namespace VexDesigner.EditorTools
             catch (System.Exception e)
             {
                 // In batch mode an uncaught exception still exits 0, which
-                // would let a broken build masquerade as a passing one.
+                // would let a broken build pass for a good one.
                 Debug.LogError($"[WorkshopSceneBuilder] FAILED: {e}");
                 EditorApplication.Exit(1);
             }
@@ -119,57 +107,30 @@ namespace VexDesigner.EditorTools
         private static void Build()
         {
             EnsureFolder(ScenesFolder);
-            EnsureFolder(MaterialsFolder);
 
             // The scene is meaningless without its surfaces, so generate them
-            // if they are missing rather than silently producing grey boxes.
-            if (!File.Exists($"{TexturesFolder}/CuttingMat_Albedo.png"))
+            // if missing rather than silently producing untextured boxes.
+            if (!File.Exists($"{TexturesFolder}/Concrete_Albedo.png"))
             {
                 Debug.Log("[WorkshopSceneBuilder] Textures missing; generating them first.");
-                ProceduralTextureGenerator.Generate();
+                SurfaceTextureGenerator.Generate();
             }
 
-            Material floorMat = CreateMaterial(
-                "Floor", new Color(0.75f, 0.75f, 0.76f), 0.92f,
-                "Concrete_Albedo", TilingFor(FloorSizeIn, FloorSizeIn, 48f));
-
-            Material tableMat = CreateMaterial(
-                "TableTop", Color.white, 0.62f,
-                "Wood_Albedo", TilingFor(TableWidthIn, TableDepthIn, 24f));
-
-            Material frameMat = CreateMaterial(
-                "TableFrame", new Color(0.20f, 0.21f, 0.23f), 0.45f, null, Vector2.one);
-
-            Material matMat = CreateMaterial(
-                "CuttingMat", Color.white, 0.80f,
-                "CuttingMat_Albedo",
-                TilingFor(MatWidthIn, MatDepthIn, MatInchesPerTextureTile));
-
-            // Emission is enabled on these two so Highlightable can drive the
-            // hover glow. The keyword cannot be switched on from a property
-            // block, so a material without it simply never lights up.
-            Material trayMat = CreateMaterial(
-                "TrayShell", new Color(0.085f, 0.088f, 0.095f), 0.35f, null,
-                Vector2.one, enableEmission: true);
-
-            Material partMat = CreateMaterial(
-                "PartAluminium", new Color(0.68f, 0.70f, 0.74f), 0.45f, null,
-                Vector2.one, enableEmission: true, metallic: 0.85f);
-
             // Definitions must exist before the shelf can list them. The shelf
-            // itself loads them at runtime from Resources, so a part converted
-            // later appears without touching this scene.
+            // loads them at runtime from Resources, so a part converted later
+            // appears without touching this scene.
             PartLibraryBuilder.Rebuild();
 
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            BuildLighting();
-            BuildFloor(floorMat);
-            BuildTable(tableMat, frameMat);
-            BuildMat(matMat);
-            BuildShelf(partMat, trayMat);
-            BuildCameraRig();
+            GarageRoomBuilder.Build();
+
+            BuildWorkTable();
+            BuildMat();
+            BuildShelf();
+            BuildPlayer();
+            BuildInterface();
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -177,55 +138,27 @@ namespace VexDesigner.EditorTools
             AssetDatabase.SaveAssets();
 
             Debug.Log(
-                $"[WorkshopSceneBuilder] Table {TableWidthIn}x{TableDepthIn}x{TableHeightIn} in, " +
-                $"mat {MatWidthIn}x{MatDepthIn} in with a 1 in grid. " +
-                $"Mat top surface at {TableHeightIn + MatThicknessIn:F2} in " +
-                $"({In(TableHeightIn + MatThicknessIn):F4} world units).");
+                $"[WorkshopSceneBuilder] Garage {GarageRoomBuilder.RoomWidthIn}x" +
+                $"{GarageRoomBuilder.RoomDepthIn}x{GarageRoomBuilder.RoomHeightIn} in. " +
+                $"Table {TableWidthIn}x{TableDepthIn}x{TableHeightIn} in, " +
+                $"mat {MatWidthIn}x{MatDepthIn} in with a 1 in grid.");
         }
 
-        private static void BuildLighting()
+        // ------------------------------------------------------------------
+        // Workbench
+        // ------------------------------------------------------------------
+
+        private static void BuildWorkTable()
         {
-            var sunGo = new GameObject("Directional Light");
-            sunGo.transform.SetPositionAndRotation(
-                new Vector3(0f, In(120f), 0f), Quaternion.Euler(50f, -30f, 0f));
-
-            Light sun = sunGo.AddComponent<Light>();
-            sun.type = LightType.Directional;
-            sun.intensity = 1.1f;
-            sun.color = new Color(1f, 0.97f, 0.91f);
-            sun.shadows = LightShadows.Soft;
-
-            // A workshop is an interior full of bounced light. Flat ambient
-            // keeps the underside of parts readable, which matters when the
-            // user is lining up screw holes.
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.44f, 0.47f, 0.52f);
-            RenderSettings.ambientEquatorColor = new Color(0.34f, 0.34f, 0.36f);
-            RenderSettings.ambientGroundColor = new Color(0.17f, 0.17f, 0.18f);
-        }
-
-        private static void BuildFloor(Material mat)
-        {
-            GameObject floor = CreateBox(
-                "Floor",
-                new Vector3(0f, In(-1f), 0f),
-                new Vector3(In(FloorSizeIn), In(2f), In(FloorSizeIn)),
-                mat);
-            floor.isStatic = true;
-        }
-
-        private static void BuildTable(Material topMat, Material frameMat)
-        {
-            var root = new GameObject("WorkshopTable");
+            var root = new GameObject("WorkTable");
             root.isStatic = true;
 
             float topCentreY = TableHeightIn - (TableTopThicknessIn * 0.5f);
-            GameObject top = CreateBox(
-                "TableTop",
-                new Vector3(0f, In(topCentreY), 0f),
-                new Vector3(In(TableWidthIn), In(TableTopThicknessIn), In(TableDepthIn)),
-                topMat);
-            top.transform.SetParent(root.transform, true);
+
+            GameObject top = Box(root, "TableTop",
+                new Vector3(0f, topCentreY, TableCentreZIn),
+                new Vector3(TableWidthIn, TableTopThicknessIn, TableDepthIn),
+                WorkshopMaterials.BenchWood, TableWidthIn, TableDepthIn);
 
             // The bare tabletop is a valid surface too, so parts set down
             // beside the mat land on the bench rather than refusing to place.
@@ -243,175 +176,96 @@ namespace VexDesigner.EditorTools
 
             for (int i = 0; i < offsets.Length; i++)
             {
-                GameObject leg = CreateBox(
-                    $"Leg_{i}",
-                    new Vector3(In(offsets[i].x), In(legHeightIn * 0.5f), In(offsets[i].y)),
-                    new Vector3(In(LegThicknessIn), In(legHeightIn), In(LegThicknessIn)),
-                    frameMat);
-                leg.transform.SetParent(root.transform, true);
-                leg.isStatic = true;
+                Box(root, $"Leg_{i}",
+                    new Vector3(offsets[i].x, legHeightIn * 0.5f, TableCentreZIn + offsets[i].y),
+                    new Vector3(LegThicknessIn, legHeightIn, LegThicknessIn),
+                    WorkshopMaterials.BenchWood, LegThicknessIn, legHeightIn);
             }
         }
 
-        private static void BuildMat(Material mat)
+        private static void BuildMat()
         {
-            GameObject buildMat = CreateBox(
-                "CuttingMat",
-                new Vector3(0f, In(TableHeightIn + (MatThicknessIn * 0.5f)), 0f),
-                new Vector3(In(MatWidthIn), In(MatThicknessIn), In(MatDepthIn)),
-                mat);
-            buildMat.isStatic = true;
+            var root = new GameObject("MatRoot");
 
-            // Parts may be set down here. The mat is the primary work surface.
-            buildMat.AddComponent<PlacementSurface>();
+            GameObject mat = Box(root, "CuttingMat",
+                new Vector3(0f, TableHeightIn + (MatThicknessIn * 0.5f), TableCentreZIn),
+                new Vector3(MatWidthIn, MatThicknessIn, MatDepthIn),
+                WorkshopMaterials.CuttingMat, MatWidthIn, MatDepthIn);
+
+            // Parts may be set down here. The mat is the primary work surface,
+            // and its one-inch grid doubles as the scene's ruler.
+            mat.AddComponent<PlacementSurface>();
         }
 
-        private static void BuildCameraRig()
-        {
-            // Rig parent holds the orbit logic; camera child stays at local
-            // zero. See WorkshopCameraRig for why this split matters for VR.
-            var rig = new GameObject("CameraRig");
-            rig.AddComponent<MouseLookInput>();
-            rig.AddComponent<MousePointerInput>();
-            WorkshopCameraRig orbit = rig.AddComponent<WorkshopCameraRig>();
-
-            // Lets placement claim the right-drag gesture from the camera while
-            // a part is being rotated, without either knowing about the other.
-            rig.AddComponent<InteractionLock>();
-
-            // Placement lives on the rig because it needs the pointer, which
-            // needs the camera. Keeping them together avoids a scene-wide
-            // lookup that would break if the rig were ever duplicated.
-            rig.AddComponent<PartPlacementController>();
-
-            var camGo = new GameObject("Main Camera");
-            camGo.tag = "MainCamera";
-            camGo.transform.SetParent(rig.transform, false);
-            camGo.transform.localPosition = Vector3.zero;
-            camGo.transform.localRotation = Quaternion.identity;
-
-            Camera cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 60f;
-
-            // Near plane is tight because the user gets close to small parts;
-            // the 0.3 default would clip a screw out of view when inspecting it.
-            cam.nearClipPlane = In(0.4f);
-            cam.farClipPlane = In(FloorSizeIn * 2f);
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.11f, 0.12f, 0.14f);
-
-            camGo.AddComponent<AudioListener>();
-
-            // Frame the mat. Set through SerializedObject rather than public
-            // setters so the rig's runtime API stays free of editor concerns.
-            var so = new SerializedObject(orbit);
-            so.FindProperty("focusPoint").vector3Value =
-                new Vector3(0f, In(TableHeightIn), 0f);
-            so.FindProperty("distance").floatValue = In(52f);
-            so.FindProperty("minDistance").floatValue = In(6f);
-            so.FindProperty("maxDistance").floatValue = In(140f);
-            // Travel covers the whole bench, tray included, as a box rather
-            // than a sphere - a spherical limit shrinks the reachable area
-            // diagonally and feels like an invisible wall short of the edge.
-            so.FindProperty("panLimitX").floatValue = In(TableWidthIn * 0.5f);
-            so.FindProperty("panLimitZ").floatValue = In(TableDepthIn * 0.5f);
-            so.FindProperty("panLimitY").floatValue = In(16f);
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        // ------------------------------------------------------------------
-        // Helpers
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        /// Texture repeats needed so one tile covers
-        /// <paramref name="inchesPerTile"/> inches of surface.
-        /// </summary>
-        private static Vector2 TilingFor(float widthIn, float depthIn, float inchesPerTile)
-        {
-            return new Vector2(widthIn / inchesPerTile, depthIn / inchesPerTile);
-        }
-
-        private static GameObject CreateBox(
-            string name, Vector3 position, Vector3 size, Material material)
-        {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            go.transform.position = position;
-            go.transform.localScale = size;
-            go.GetComponent<MeshRenderer>().sharedMaterial = material;
-            return go;
-        }
-
-        /// <summary>
-        /// The parts shelf: a marked-out patch of bench to the left of the mat
-        /// where one of every catalogued part is laid out, paged.
-        ///
-        /// The region is deeper than it is wide because the longest common VEX
-        /// stock - a 35-hole C-channel at 17.5 in - has to lie down inside it.
-        /// Laying parts along the short axis would leave the biggest ones
-        /// unplaceable.
-        /// </summary>
-        private static void BuildShelf(Material partMaterial, Material furnitureMaterial)
+        private static void BuildShelf()
         {
             var root = new GameObject("PartsShelf");
-            root.transform.position = new Vector3(In(ShelfCentreXIn), In(TableHeightIn), 0f);
+            root.transform.position =
+                new Vector3(In(ShelfCentreXIn), In(TableHeightIn), In(TableCentreZIn));
 
             var shelf = root.AddComponent<PartShelf>();
 
             var so = new SerializedObject(shelf);
             so.FindProperty("regionWidthIn").floatValue = ShelfWidthIn;
             so.FindProperty("regionDepthIn").floatValue = ShelfDepthIn;
-            so.FindProperty("partMaterial").objectReferenceValue = partMaterial;
+            so.FindProperty("partMaterial").objectReferenceValue =
+                WorkshopMaterials.Aluminium.Material;
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            // Faint outline so the shelf region reads as a designated area
-            // rather than parts happening to sit there.
-            GameObject outline = CreateBox(
-                "ShelfSurface",
-                new Vector3(In(ShelfCentreXIn), In(TableHeightIn + 0.01f), 0f),
-                new Vector3(In(ShelfWidthIn), In(0.02f), In(ShelfDepthIn)),
-                furnitureMaterial);
-            outline.isStatic = true;
-            outline.GetComponent<Collider>().enabled = false;
+            // A separate stand under the shelf region, so parts are not
+            // floating beside the main table.
+            var stand = new GameObject("ShelfStand");
+            stand.isStatic = true;
+            Box(stand, "StandTop",
+                new Vector3(ShelfCentreXIn, TableHeightIn - 0.75f, TableCentreZIn),
+                new Vector3(ShelfWidthIn + 3f, 1.5f, ShelfDepthIn + 3f),
+                WorkshopMaterials.BenchWood, ShelfWidthIn, ShelfDepthIn);
 
-            float controlsZ = (ShelfDepthIn * 0.5f) + 2.5f;
-            BuildPageArrow(root, shelf, -1, new Vector3(ShelfCentreXIn - 4f, TableHeightIn, controlsZ), furnitureMaterial);
-            BuildPageArrow(root, shelf, +1, new Vector3(ShelfCentreXIn + 4f, TableHeightIn, controlsZ), furnitureMaterial);
+            for (int i = 0; i < 4; i++)
+            {
+                float sx = ShelfCentreXIn + ((i % 2 == 0 ? 1 : -1) * (ShelfWidthIn * 0.4f));
+                float sz = TableCentreZIn + ((i < 2 ? 1 : -1) * (ShelfDepthIn * 0.4f));
+                Box(stand, $"StandLeg_{i}",
+                    new Vector3(sx, (TableHeightIn - 1.5f) * 0.5f, sz),
+                    new Vector3(2.5f, TableHeightIn - 1.5f, 2.5f),
+                    WorkshopMaterials.Steel, 3f, TableHeightIn);
+            }
+
+            float controlsZ = TableCentreZIn + (ShelfDepthIn * 0.5f) + 2.5f;
+            BuildPageArrow(root, shelf, -1, new Vector3(ShelfCentreXIn - 4f, TableHeightIn, controlsZ));
+            BuildPageArrow(root, shelf, +1, new Vector3(ShelfCentreXIn + 4f, TableHeightIn, controlsZ));
             BuildPageLabel(root, shelf, new Vector3(ShelfCentreXIn, TableHeightIn + 0.1f, controlsZ));
         }
 
         private static void BuildPageArrow(
-            GameObject parent, PartShelf shelf, int direction, Vector3 positionIn, Material material)
+            GameObject parent, PartShelf shelf, int direction, Vector3 positionIn)
         {
             var go = new GameObject(direction < 0 ? "PageArrow_Prev" : "PageArrow_Next");
             go.transform.SetParent(parent.transform, true);
             go.transform.position = new Vector3(In(positionIn.x), In(positionIn.y), In(positionIn.z));
-
-            // Point the flat chevron left or right across the bench.
             go.transform.rotation = Quaternion.Euler(0f, direction < 0 ? 180f : 0f, 0f);
 
             go.AddComponent<MeshFilter>().sharedMesh = BuildArrowMesh();
-            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+            go.AddComponent<MeshRenderer>().sharedMaterial = WorkshopMaterials.Steel.Material;
 
             var box = go.AddComponent<BoxCollider>();
-            box.size = new Vector3(In(3f), In(1.2f), In(3f));
-            box.center = new Vector3(0f, In(0.4f), 0f);
+            box.size = new Vector3(In(3f), In(1.5f), In(3f));
+            box.center = new Vector3(0f, In(0.5f), 0f);
 
             go.AddComponent<Highlightable>();
             go.AddComponent<ShelfPageArrow>().Configure(shelf, direction);
         }
 
         /// <summary>
-        /// A flat triangular chevron lying on the bench. Built from code
-        /// because it is three vertices and pulling in an art asset for that
-        /// would be sillier than the twelve lines below.
+        /// A flat chevron lying on the bench. Built from code because it is
+        /// three vertices, and pulling in an art asset for that would be
+        /// sillier than the ten lines below.
         /// </summary>
         private static Mesh BuildArrowMesh()
         {
             float halfLength = In(1.2f);
             float halfWidth = In(1.2f);
-            float lift = In(0.05f);
+            float lift = In(0.06f);
 
             var mesh = new Mesh { name = "PageArrow" };
             mesh.vertices = new[]
@@ -421,8 +275,7 @@ namespace VexDesigner.EditorTools
                 new Vector3(-halfLength * 0.6f, lift, -halfWidth),
             };
 
-            // Wound both ways so the chevron is visible from underneath the
-            // bench as well, which matters once the camera can drop low.
+            // Wound both ways so it is visible from below as well as above.
             mesh.triangles = new[] { 0, 1, 2, 0, 2, 1 };
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -440,110 +293,168 @@ namespace VexDesigner.EditorTools
 
             var text = go.AddComponent<TMPro.TextMeshPro>();
             text.text = "Page 1 / 1";
-            text.fontSize = 1.4f;
+            text.fontSize = 1.2f;
             text.alignment = TMPro.TextAlignmentOptions.Center;
             text.color = new Color(0.92f, 0.93f, 0.95f);
 
             var rect = go.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(In(10f), In(2.5f));
+                rect.sizeDelta = new Vector2(In(12f), In(3f));
             }
 
             shelf.AttachLabel(text);
         }
 
-        private static Material CreateMaterial(
-            string name, Color colour, float roughness, string textureName, Vector2 tiling,
-            bool enableEmission = false, float metallic = 0f)
+        // ------------------------------------------------------------------
+        // Player
+        // ------------------------------------------------------------------
+
+        private static void BuildPlayer()
         {
-            string path = $"{MaterialsFolder}/{name}.mat";
+            var player = new GameObject("Player");
+            player.transform.position = GarageRoomBuilder.PlayerSpawnPosition;
+            player.transform.rotation = Quaternion.Euler(0f, GarageRoomBuilder.PlayerSpawnYaw, 0f);
 
-            // Fall back to the default shader if URP is somehow absent, so the
-            // scene builds with visible-but-wrong materials rather than the
-            // magenta "shader missing" soup that gives no clue what went wrong.
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
+            var controller = player.AddComponent<CharacterController>();
+            controller.height = In(68f);
+            controller.radius = In(9f);
+            controller.center = new Vector3(0f, In(34f), 0f);
+
+            // Generous step and slope so the player is not stopped by the
+            // small lips and thresholds a built environment is full of.
+            controller.stepOffset = In(8f);
+            controller.slopeLimit = 50f;
+            controller.skinWidth = In(0.4f);
+
+            // Head is a child. Yaw turns the body, pitch turns the head - which
+            // is what lets VR take over the camera transform later without the
+            // two fighting.
+            var head = new GameObject("Head");
+            head.transform.SetParent(player.transform, false);
+            head.transform.localPosition = new Vector3(0f, In(66f), 0f);
+
+            Camera cam = head.AddComponent<Camera>();
+            cam.tag = "MainCamera";
+            cam.fieldOfView = 70f;
+
+            // Tight near plane because the player leans in close to small
+            // parts; the 0.3 default would clip a screw out of view.
+            cam.nearClipPlane = In(0.8f);
+            cam.farClipPlane = In(2000f);
+            head.AddComponent<AudioListener>();
+
+            var input = player.AddComponent<FirstPersonInput>();
+            var inputSo = new SerializedObject(input);
+            inputSo.FindProperty("aimCamera").objectReferenceValue = cam;
+            inputSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var fps = player.AddComponent<FirstPersonController>();
+            var fpsSo = new SerializedObject(fps);
+            fpsSo.FindProperty("head").objectReferenceValue = head.transform;
+            fpsSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // Footsteps live on their own child so the AudioSource is not
+            // competing with anything else on the player.
+            var steps = new GameObject("Footsteps");
+            steps.transform.SetParent(player.transform, false);
+            steps.AddComponent<AudioSource>();
+            steps.AddComponent<FootstepAudio>();
+
+            // Placement needs the pointer, which needs the camera, so all
+            // three live together.
+            player.AddComponent<InteractionLock>();
+            player.AddComponent<PartPlacementController>();
+
+            // Spawn point is baked in rather than read back from the room
+            // builder at runtime, because that builder is editor-only code and
+            // does not exist in a real build.
+            player.AddComponent<PlayerSpawn>().Configure(
+                GarageRoomBuilder.PlayerSpawnPosition, GarageRoomBuilder.PlayerSpawnYaw);
+        }
+
+        // ------------------------------------------------------------------
+        // Interface
+        // ------------------------------------------------------------------
+
+        private static void BuildInterface()
+        {
+            var canvasGo = new GameObject("HUD");
+            var canvas = canvasGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            var scaler = canvasGo.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            canvasGo.AddComponent<GraphicRaycaster>();
+
+            GameObject dot = CreateHudImage(canvasGo.transform, "Dot", 10f);
+            dot.GetComponent<Image>().sprite = Crosshair.GetDotSprite();
+
+            GameObject hand = CreateHudImage(canvasGo.transform, "Hand", 34f);
+            hand.GetComponent<Image>().sprite = Crosshair.GetHandSprite();
+            hand.GetComponent<Image>().enabled = false;
+
+            var crosshair = canvasGo.AddComponent<Crosshair>();
+            var so = new SerializedObject(crosshair);
+            so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
+            so.FindProperty("hand").objectReferenceValue = hand.GetComponent<Image>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            // An EventSystem is required for any UI interaction. Without one
+            // the pause menu's buttons would render but never respond.
+            if (Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
             {
-                Debug.LogWarning(
-                    "[WorkshopSceneBuilder] URP Lit shader not found. Falling back " +
-                    "to the default shader. Is the Universal RP package installed " +
-                    "and assigned in Project Settings > Graphics?");
-                shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
+                var events = new GameObject("EventSystem");
+                events.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                events.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+            }
+        }
+
+        private static GameObject CreateHudImage(Transform parent, string name, float size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(size, size);
+
+            var image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            return go;
+        }
+
+        // ------------------------------------------------------------------
+        // Helpers
+        // ------------------------------------------------------------------
+
+        private static GameObject Box(
+            GameObject parent, string name, Vector3 centreIn, Vector3 sizeIn,
+            WorkshopMaterials.Surface surface, float tileWidthIn, float tileHeightIn)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.transform.SetParent(parent.transform, false);
+            go.transform.position = new Vector3(In(centreIn.x), In(centreIn.y), In(centreIn.z));
+            go.transform.localScale = new Vector3(In(sizeIn.x), In(sizeIn.y), In(sizeIn.z));
+            go.isStatic = true;
+
+            if (surface?.Material != null)
+            {
+                var renderer = go.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = surface.Material;
+
+                Vector2 tiling = surface.TilingFor(tileWidthIn, tileHeightIn);
+                var block = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(block);
+                block.SetVector("_BaseMap_ST", new Vector4(tiling.x, tiling.y, 0f, 0f));
+                renderer.SetPropertyBlock(block);
             }
 
-            var mat = new Material(shader) { name = name };
-
-            if (mat.HasProperty("_BaseColor"))
-            {
-                mat.SetColor("_BaseColor", colour);
-            }
-            if (mat.HasProperty("_Color"))
-            {
-                mat.SetColor("_Color", colour);
-            }
-            if (mat.HasProperty("_Smoothness"))
-            {
-                mat.SetFloat("_Smoothness", 1f - roughness);
-            }
-            if (mat.HasProperty("_Glossiness"))
-            {
-                mat.SetFloat("_Glossiness", 1f - roughness);
-            }
-            if (mat.HasProperty("_Metallic"))
-            {
-                mat.SetFloat("_Metallic", metallic);
-            }
-
-            if (enableEmission)
-            {
-                // Black emission is invisible; Highlightable raises it on hover.
-                mat.EnableKeyword("_EMISSION");
-                mat.globalIlluminationFlags =
-                    MaterialGlobalIlluminationFlags.RealtimeEmissive;
-                if (mat.HasProperty("_EmissionColor"))
-                {
-                    mat.SetColor("_EmissionColor", Color.black);
-                }
-            }
-
-            if (!string.IsNullOrEmpty(textureName))
-            {
-                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    $"{TexturesFolder}/{textureName}.png");
-
-                if (tex == null)
-                {
-                    Debug.LogWarning(
-                        $"[WorkshopSceneBuilder] Texture '{textureName}' not found. " +
-                        "Run VexDesigner > Regenerate Workshop Textures.");
-                }
-                else if (mat.HasProperty("_BaseMap"))
-                {
-                    mat.SetTexture("_BaseMap", tex);
-                    mat.SetTextureScale("_BaseMap", tiling);
-                }
-                else if (mat.HasProperty("_MainTex"))
-                {
-                    mat.SetTexture("_MainTex", tex);
-                    mat.SetTextureScale("_MainTex", tiling);
-                }
-            }
-
-            // Overwrite rather than reuse: sizes and tiling change when the
-            // constants above change, and a stale material would silently keep
-            // the old grid scale - which is exactly the bug this scene exists
-            // to make impossible.
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null)
-            {
-                EditorUtility.CopySerialized(mat, existing);
-                Object.DestroyImmediate(mat);
-                return existing;
-            }
-
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
+            return go;
         }
 
         private static void RegisterInBuildSettings()
