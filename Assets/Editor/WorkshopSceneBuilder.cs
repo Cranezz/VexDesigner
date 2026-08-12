@@ -132,6 +132,8 @@ namespace VexDesigner.EditorTools
             BuildPlayer();
             BuildInterface();
 
+            VerifyShaders();
+
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
             RegisterInBuildSettings();
@@ -551,6 +553,41 @@ namespace VexDesigner.EditorTools
             }
 
             return go;
+        }
+
+        /// <summary>
+        /// Checks that hand-written shaders actually resolve.
+        ///
+        /// A broken shader does not fail the build - it just fails to be found
+        /// at runtime, and the code falls back or renders magenta. For the
+        /// gizmo that would show up as handles that are simply invisible,
+        /// which looks like a logic bug and is hunted for in the wrong place.
+        /// Cheaper to assert it here.
+        /// </summary>
+        private static void VerifyShaders()
+        {
+            var required = new[] { "VexDesigner/GizmoOverlay" };
+
+            foreach (string name in required)
+            {
+                Shader shader = Shader.Find(name);
+                if (shader == null)
+                {
+                    Debug.LogError(
+                        $"[WorkshopSceneBuilder] Shader '{name}' not found. The " +
+                        "transform gizmo will fall back and may be invisible.");
+                }
+                else if (!shader.isSupported)
+                {
+                    Debug.LogError(
+                        $"[WorkshopSceneBuilder] Shader '{name}' failed to compile " +
+                        "on this platform.");
+                }
+                else
+                {
+                    Debug.Log($"[WorkshopSceneBuilder] Shader OK: {name}");
+                }
+            }
         }
 
         private static void RegisterInBuildSettings()
