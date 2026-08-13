@@ -43,6 +43,62 @@ namespace VexDesigner.UI
             LoadValues();
         }
 
+        /// <summary>
+        /// Applies saved preferences without needing the settings page.
+        ///
+        /// The page lives on a disabled object until it is first opened, so its
+        /// Start never runs before then. Without this, a saved sensitivity or
+        /// snap increment would sit unused until the user happened to visit
+        /// settings - which looks exactly like the setting not persisting.
+        /// </summary>
+        public static void ApplySaved()
+        {
+            AudioListener.volume = PlayerPrefs.GetFloat("vex.volume", 1f);
+
+            var input = FindAnyObjectByType<VexDesigner.InputSources.FirstPersonInput>();
+            if (input != null)
+            {
+                input.SetLookSensitivity(PlayerPrefs.GetFloat("vex.sensitivity", 0.12f));
+            }
+
+            var tool = FindAnyObjectByType<VexDesigner.Parts.TransformToolController>();
+            if (tool != null)
+            {
+                tool.SetMoveSnapInches(PlayerPrefs.GetFloat("vex.snap.move", 0.5f));
+                tool.SetRotationSnapDegrees(PlayerPrefs.GetFloat("vex.snap.rotate", 15f));
+            }
+
+            ApplyQuality(PlayerPrefs.GetInt("vex.quality", 2));
+        }
+
+        private static void ApplyQuality(int level)
+        {
+            level = Mathf.Clamp(level, 0, 3);
+
+            switch (level)
+            {
+                case 0:
+                    QualitySettings.shadows = ShadowQuality.Disable;
+                    QualitySettings.shadowDistance = 0f;
+                    break;
+
+                case 1:
+                    QualitySettings.shadows = ShadowQuality.HardOnly;
+                    QualitySettings.shadowDistance = 8f;
+                    break;
+
+                case 2:
+                    QualitySettings.shadows = ShadowQuality.All;
+                    QualitySettings.shadowDistance = 16f;
+                    break;
+
+                default:
+                    QualitySettings.shadows = ShadowQuality.All;
+                    QualitySettings.shadowDistance = 30f;
+                    break;
+            }
+        }
+
         // ------------------------------------------------------------------
         // Display
         // ------------------------------------------------------------------
@@ -106,28 +162,7 @@ namespace VexDesigner.UI
             // Shadows are the single biggest lighting cost in a room lit by
             // three point lights, so they are what the slider actually moves
             // today.
-            switch (level)
-            {
-                case 0:
-                    QualitySettings.shadows = ShadowQuality.Disable;
-                    QualitySettings.shadowDistance = 0f;
-                    break;
-
-                case 1:
-                    QualitySettings.shadows = ShadowQuality.HardOnly;
-                    QualitySettings.shadowDistance = 8f;
-                    break;
-
-                case 2:
-                    QualitySettings.shadows = ShadowQuality.All;
-                    QualitySettings.shadowDistance = 16f;
-                    break;
-
-                default:
-                    QualitySettings.shadows = ShadowQuality.All;
-                    QualitySettings.shadowDistance = 30f;
-                    break;
-            }
+            ApplyQuality(level);
 
             if (qualityLabel != null)
             {

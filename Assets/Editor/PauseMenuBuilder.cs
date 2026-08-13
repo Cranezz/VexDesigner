@@ -27,7 +27,13 @@ namespace VexDesigner.EditorTools
             GameObject root = Panel(canvas, "PauseMenu", PanelColour);
             Stretch(root.GetComponent<RectTransform>());
 
-            var menu = root.AddComponent<PauseMenu>();
+            // The component lives on the canvas, NOT on the panel it hides.
+            //
+            // A component on a disabled GameObject never runs Update, so
+            // putting it on the panel meant the menu could switch itself off
+            // but nothing was left listening to switch it back on - Escape
+            // reached nothing at all.
+            var menu = canvas.gameObject.AddComponent<PauseMenu>();
 
             GameObject main = BuildMainPage(root.transform, menu);
             GameObject settings = BuildSettingsPage(root.transform, menu);

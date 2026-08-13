@@ -33,6 +33,11 @@ namespace VexDesigner.UI
         {
             input = FindAnyObjectByType<FirstPersonInput>();
             player = FindAnyObjectByType<FirstPersonController>();
+
+            // The settings page is disabled until first opened, so its own
+            // startup never runs. Preferences are applied from here instead.
+            SettingsPanel.ApplySaved();
+
             Close();
         }
 
