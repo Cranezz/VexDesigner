@@ -50,6 +50,7 @@ namespace VexDesigner.EditorTools
             public int AxisCount;
             public int RejectedCount;
             public int MergedCount;
+            public int OddSizedCount;
             public string Summary;
         }
 
@@ -82,6 +83,10 @@ namespace VexDesigner.EditorTools
             int before = holes.Count;
             holes = Merge(holes);
             result.MergedCount = before - holes.Count;
+
+            int beforeSizeFilter = holes.Count;
+            holes = KeepConsistentSizes(holes);
+            result.OddSizedCount = beforeSizeFilter - holes.Count;
 
             holes.Sort((a, b) => a.LocalCentre.sqrMagnitude.CompareTo(b.LocalCentre.sqrMagnitude));
 
@@ -738,6 +743,77 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
+        /// Drops detections whose size does not match any common hole size on
+        /// the part.
+        ///
+        /// A manufactured part uses a small number of standard hole sizes, and
+        /// they repeat dozens of times. A detection that shares its size with
+        /// almost nothing else is a place the rays happened to find a gap -
+        /// typically where a bend curves away from the surface it started on.
+        ///
+        /// Sizes are clustered rather than compared to a single median, so a
+        /// part that genuinely has two hole sizes keeps both. What it will not
+        /// keep is a size that appears six times against a hundred and ninety.
+        /// </summary>
+        private static List<Hole> KeepConsistentSizes(List<Hole> holes)
+        {
+            if (holes.Count < 12)
+            {
+                // Too few to say what is typical; keep everything and let the
+                // eye decide.
+                return holes;
+            }
+
+            const float binInches = 0.02f;
+            float bin = binInches * InchesToMetres;
+
+            var counts = new Dictionary<int, int>();
+            foreach (Hole hole in holes)
+            {
+                int key = Mathf.RoundToInt(hole.front.width / bin);
+                counts.TryGetValue(key, out int count);
+                counts[key] = count + 1;
+            }
+
+            // Judged against the most common size, not against the total.
+            //
+            // A share of the total is the wrong yardstick: the stray
+            // detections at a C-channel's bends came to twelve percent of all
+            // holes found, which slipped past a ten percent floor. Measured
+            // against the dominant size they are fourteen percent of it, and
+            // clearly the odd ones out.
+            int largest = 0;
+            foreach (int count in counts.Values)
+            {
+                largest = Mathf.Max(largest, count);
+            }
+
+            int minimum = Mathf.Max(4, Mathf.RoundToInt(largest * 0.3f));
+
+            var kept = new List<Hole>(holes.Count);
+            foreach (Hole hole in holes)
+            {
+                int key = Mathf.RoundToInt(hole.front.width / bin);
+
+                // Neighbouring bins count too, so a size straddling a boundary
+                // is not split in half and thrown away.
+                int total = 0;
+                for (int offset = -1; offset <= 1; offset++)
+                {
+                    counts.TryGetValue(key + offset, out int count);
+                    total += count;
+                }
+
+                if (total >= minimum)
+                {
+                    kept.Add(hole);
+                }
+            }
+
+            return kept;
+        }
+
+        /// <summary>
         /// Distribution of nearest-neighbour distances. A clean detection is a
         /// single spike at the hole pitch; anything else says what went wrong.
         /// </summary>
@@ -769,6 +845,22 @@ namespace VexDesigner.EditorTools
                 buckets.TryGetValue(bucket, out int count);
                 buckets[bucket] = count + 1;
             }
+
+            var widths = new SortedDictionary<int, int>();
+            foreach (Hole hole in holes)
+            {
+                int w = Mathf.RoundToInt(hole.front.width / InchesToMetres * 100f);
+                widths.TryGetValue(w, out int wc);
+                widths[w] = wc + 1;
+            }
+
+            var widthText = new System.Text.StringBuilder("[Holes]   width histogram: ");
+            foreach (KeyValuePair<int, int> pair in widths)
+            {
+                widthText.Append($"{pair.Key / 100f:F2}in x{pair.Value}  ");
+            }
+
+            Debug.Log(widthText.ToString());
 
             var text = new System.Text.StringBuilder("[Holes]   spacing histogram: ");
             foreach (KeyValuePair<int, int> pair in buckets)
@@ -851,7 +943,8 @@ namespace VexDesigner.EditorTools
             }
 
             return $"{result.Holes.Count} holes across {result.AxisCount} axes " +
-                   $"({result.RejectedCount} openings rejected by size).\n" +
+                   $"({result.MergedCount} merged, {result.OddSizedCount} dropped as " +
+                   $"odd-sized, {result.RejectedCount} out of range).\n" +
                    $"Spacing: {pitch}{warning}";
         }
     }

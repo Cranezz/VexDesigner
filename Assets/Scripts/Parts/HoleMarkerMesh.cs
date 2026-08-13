@@ -26,6 +26,55 @@ namespace VexDesigner.Parts
         private const float CornerRadiusFraction = 0.32f;
 
         /// <summary>
+        /// Solid rounded square filling a hole of the given width.
+        ///
+        /// A fill rather than a ring, because the highlight should read as the
+        /// hole itself lighting up. An outline reads as something drawn around
+        /// the hole, and at a glance it is hard to tell which of two adjacent
+        /// holes a ring belongs to.
+        /// </summary>
+        public static Mesh Filled(float width)
+        {
+            int key = Mathf.RoundToInt(width * 100000f) + 7;
+
+            if (Cache.TryGetValue(key, out Mesh cached) && cached != null)
+            {
+                return cached;
+            }
+
+            var edge = Profile(width * 0.5f);
+
+            // Triangle fan from the centre. The profile is convex, so a fan is
+            // both correct and the cheapest way to fill it.
+            var vertices = new Vector3[edge.Count + 1];
+            vertices[0] = Vector3.zero;
+
+            for (int i = 0; i < edge.Count; i++)
+            {
+                vertices[i + 1] = new Vector3(edge[i].x, edge[i].y, 0f);
+            }
+
+            var triangles = new int[edge.Count * 3];
+            for (int i = 0; i < edge.Count; i++)
+            {
+                int next = (i + 1) % edge.Count;
+
+                triangles[i * 3] = 0;
+                triangles[(i * 3) + 1] = i + 1;
+                triangles[(i * 3) + 2] = next + 1;
+            }
+
+            var mesh = new Mesh { name = "HoleFill" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            Cache[key] = mesh;
+            return mesh;
+        }
+
+        /// <summary>
         /// Ring outlining a hole of the given width across the flats.
         /// </summary>
         public static Mesh Outline(float width, float lineThickness)

@@ -278,6 +278,11 @@ namespace VexDesigner.EditorTools
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
+            // Materials first. BuildPart asked for the aluminium material
+            // before anything had created it, so it got null and rendered as
+            // the magenta "no shader" fallback.
+            WorkshopMaterials.BuildAll();
+
             BuildLighting();
             GameObject instance = BuildPart(part);
             BuildGrid(part);
@@ -312,8 +317,6 @@ namespace VexDesigner.EditorTools
 
         private static void BuildGrid(PartDefinition part)
         {
-            WorkshopMaterials.BuildAll();
-
             // Sized to the part with a margin, and rounded up to whole feet so
             // the grid always ends on a major line.
             Vector3 size = part.mesh.bounds.size / InchesToMetres;
@@ -374,13 +377,15 @@ namespace VexDesigner.EditorTools
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
 
-            // Lifted a hair off the surface, or the ring fights the metal for
-            // the same pixels and flickers.
-            go.transform.localPosition = face.localPosition + (face.localNormal * 0.0002f);
+            // Flush with the surface. No lift is needed because the marker
+            // draws with the overlay shader, which ignores depth entirely -
+            // there is nothing for it to fight with.
+            go.transform.localPosition = face.localPosition;
             go.transform.localRotation = Quaternion.LookRotation(face.localNormal);
 
-            go.AddComponent<MeshFilter>().sharedMesh =
-                HoleMarkerMesh.Outline(face.width, face.width * 0.12f);
+            // Filled, not a ring: the highlight should read as the hole
+            // lighting up, not as something drawn around it.
+            go.AddComponent<MeshFilter>().sharedMesh = HoleMarkerMesh.Filled(face.width);
 
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
