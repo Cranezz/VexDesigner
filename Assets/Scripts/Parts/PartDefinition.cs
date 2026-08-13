@@ -102,6 +102,13 @@ namespace VexDesigner.Parts
                  "VEX structure.")]
         public float holePitchInches = 0.5f;
 
+        [Header("Holes (generated — do not hand-edit)")]
+        [Tooltip("Detected screw holes, computed in the editor and saved.\n\n" +
+                 "Never recomputed at runtime: holes are what screws snap to " +
+                 "and what save files refer to, so they must be identical in " +
+                 "every session and on every machine.")]
+        public HoleSet holeSet = new HoleSet();
+
         [Header("Appearance")]
         public Color colour = new Color(0.68f, 0.70f, 0.74f);
         [Range(0f, 1f)] public float smoothness = 0.55f;

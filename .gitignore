@@ -118,3 +118,6 @@ InitTestScene*.unity*
 /[Aa]ssets/PartInbox/*
 !/[Aa]ssets/PartInbox/.gitkeep
 /PartSources/
+
+# Hole detector diagnostics
+HoleDump_*.csv

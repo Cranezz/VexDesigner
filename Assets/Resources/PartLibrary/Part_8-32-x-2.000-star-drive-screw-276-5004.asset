@@ -27,6 +27,10 @@ MonoBehaviour:
     subClass: 30
   mesh: {fileID: -2432090755550338912, guid: c4fae9d488529a24c9bfe7c42c6fb091, type: 3}
   holePitchInches: 0.5
+  holeSet:
+    holes: []
+    measuredPitchInches: 0
+    generatedAt: 
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85

@@ -31,6 +31,9 @@ namespace VexDesigner.EditorTools
         private PartDefinition[] parts;
         private PartDefinition current;
         private string filter = string.Empty;
+        private string lastSummary = string.Empty;
+        private bool lastWasWarning;
+        private bool showMarkers = true;
 
         [MenuItem("VexDesigner/Part Inspector")]
         public static void Open()
@@ -188,6 +191,75 @@ namespace VexDesigner.EditorTools
                         MessageType.Error);
                 }
             }
+
+            DrawHoleSection();
+        }
+
+        private void DrawHoleSection()
+        {
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Holes", EditorStyles.boldLabel);
+
+                HoleSet set = current.holeSet;
+                if (set == null || set.IsEmpty)
+                {
+                    EditorGUILayout.LabelField("None detected yet.");
+                }
+                else
+                {
+                    EditorGUILayout.LabelField("Count", set.Count.ToString());
+                    EditorGUILayout.LabelField(
+                        "Measured spacing", $"{set.measuredPitchInches:F3} in");
+                    EditorGUILayout.LabelField("Generated", set.generatedAt);
+                }
+
+                if (!string.IsNullOrEmpty(lastSummary))
+                {
+                    EditorGUILayout.HelpBox(lastSummary, lastWasWarning
+                        ? MessageType.Warning
+                        : MessageType.Info);
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Detect Holes", GUILayout.Height(24f)))
+                    {
+                        DetectHoles(current);
+                    }
+
+                    using (new EditorGUI.DisabledScope(current.holeSet == null ||
+                                                       current.holeSet.IsEmpty))
+                    {
+                        showMarkers = GUILayout.Toggle(
+                            showMarkers, "Show markers", "Button", GUILayout.Width(110f));
+                    }
+                }
+
+                EditorGUILayout.LabelField(
+                    "Detection is an editor step. Holes are saved on the part and " +
+                    "never recomputed at runtime.",
+                    EditorStyles.wordWrappedMiniLabel);
+            }
+        }
+
+        private void DetectHoles(PartDefinition part)
+        {
+            HoleDetector.Result result = HoleDetector.Detect(
+                part.mesh, part.holePitchInches);
+
+            part.holeSet = result.Holes;
+            EditorUtility.SetDirty(part);
+            AssetDatabase.SaveAssets();
+
+            lastSummary = result.Summary;
+            lastWasWarning = result.Holes.IsEmpty ||
+                             result.Summary.Contains("does not match");
+
+            Debug.Log($"[Holes] {part.partId}: {result.Summary}");
+
+            // Reopen so the markers appear over the geometry they came from.
+            LoadPart(part);
         }
 
         // ------------------------------------------------------------------
@@ -209,6 +281,11 @@ namespace VexDesigner.EditorTools
             BuildLighting();
             GameObject instance = BuildPart(part);
             BuildGrid(part);
+
+            if (showMarkers)
+            {
+                BuildHoleMarkers(part, instance.transform);
+            }
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -259,6 +336,66 @@ namespace VexDesigner.EditorTools
             renderer.SetPropertyBlock(block);
 
             grid.GetComponent<Collider>().enabled = false;
+        }
+
+        /// <summary>
+        /// Draws a ring on every detected hole, on both faces.
+        ///
+        /// Two colours rather than one: the front face green and the back face
+        /// red, so it is obvious at a glance that each hole really did pair up
+        /// across the material. A hole showing only one colour was not paired,
+        /// which is exactly the failure worth spotting by eye.
+        /// </summary>
+        private static void BuildHoleMarkers(PartDefinition part, Transform partTransform)
+        {
+            HoleSet set = part.holeSet;
+            if (set == null || set.IsEmpty)
+            {
+                return;
+            }
+
+            var root = new GameObject("HoleMarkers");
+            root.transform.SetParent(partTransform, false);
+
+            Material front = MarkerMaterial("HoleFront", new Color(0.2f, 1f, 0.35f));
+            Material back = MarkerMaterial("HoleBack", new Color(1f, 0.3f, 0.25f));
+
+            for (int i = 0; i < set.holes.Length; i++)
+            {
+                Hole hole = set.holes[i];
+                AddMarker(root.transform, $"Hole_{i}_front", hole.front, front);
+                AddMarker(root.transform, $"Hole_{i}_back", hole.back, back);
+            }
+        }
+
+        private static void AddMarker(
+            Transform parent, string name, HoleFace face, Material material)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+
+            // Lifted a hair off the surface, or the ring fights the metal for
+            // the same pixels and flickers.
+            go.transform.localPosition = face.localPosition + (face.localNormal * 0.0002f);
+            go.transform.localRotation = Quaternion.LookRotation(face.localNormal);
+
+            go.AddComponent<MeshFilter>().sharedMesh =
+                HoleMarkerMesh.Outline(face.width, face.width * 0.12f);
+
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+
+        private static Material MarkerMaterial(string name, Color colour)
+        {
+            Shader shader = Shader.Find("VexDesigner/GizmoOverlay")
+                ?? Shader.Find("Universal Render Pipeline/Unlit");
+
+            var material = new Material(shader) { name = name };
+            material.SetColor("_BaseColor", colour);
+            return material;
         }
 
         private static void BuildLighting()
