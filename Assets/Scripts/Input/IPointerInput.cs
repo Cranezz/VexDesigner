@@ -50,6 +50,15 @@ namespace VexDesigner.InputSources
         bool SecondaryHeld { get; }
 
         /// <summary>
+        /// True on the frame the secondary action begins.
+        ///
+        /// Distinct from the held state because the two mean different things
+        /// here: held drives a continuous rotation, whereas the press edge is
+        /// what anchors a hole for mating.
+        /// </summary>
+        bool SecondaryPressedThisFrame { get; }
+
+        /// <summary>
         /// Raw pointer movement this frame, in device units. Only meaningful
         /// paired with a held button; on its own the aim ray already says
         /// where the user is pointing.

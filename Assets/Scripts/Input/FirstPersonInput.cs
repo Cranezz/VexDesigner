@@ -37,6 +37,7 @@ namespace VexDesigner.InputSources
         public bool PrimaryPressedThisFrame { get; private set; }
         public bool PrimaryHeld { get; private set; }
         public bool SecondaryHeld { get; private set; }
+        public bool SecondaryPressedThisFrame { get; private set; }
         public bool RepeatModifierHeld { get; private set; }
         public bool IsOverInterface { get; private set; }
         public Vector2 DragDelta { get; private set; }
@@ -227,6 +228,7 @@ namespace VexDesigner.InputSources
                 PrimaryPressedThisFrame = false;
                 PrimaryHeld = false;
                 SecondaryHeld = false;
+                SecondaryPressedThisFrame = false;
                 return;
             }
 
@@ -239,6 +241,7 @@ namespace VexDesigner.InputSources
                 PrimaryPressedThisFrame = mouse.leftButton.wasPressedThisFrame && CursorLocked;
                 PrimaryHeld = mouse.leftButton.isPressed && CursorLocked;
                 SecondaryHeld = mouse.rightButton.isPressed && CursorLocked;
+                SecondaryPressedThisFrame = mouse.rightButton.wasPressedThisFrame && CursorLocked;
                 DragDelta = mouse.delta.ReadValue();
             }
 

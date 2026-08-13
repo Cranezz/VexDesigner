@@ -79,7 +79,9 @@ namespace VexDesigner.Parts
         // --- Hole aiming ----------------------------------------------------
 
         private HoleHighlighter aimMarker;
+        private HoleHighlighter anchorMarker;
         private HoleHit aimedHole;
+        private HoleHit anchoredHole;
         private Highlightable dimmed;
 
         [Header("Holes")]
@@ -93,6 +95,14 @@ namespace VexDesigner.Parts
         [Tooltip("How far the part's own glow drops while one of its holes is " +
                  "targeted. Low enough that the hole clearly wins.")]
         [SerializeField, Range(0f, 1f)] private float partDimWhileAiming = 0.18f;
+
+        [Tooltip("Colour of a hole anchored for mating. Distinct from both aim " +
+                 "colours, since it stays on screen while another hole is being " +
+                 "chosen and must not be mistaken for the one under the cursor.")]
+        [SerializeField] private Color anchorColour = new Color(0.35f, 1f, 0.45f);
+
+        /// <summary>True while a hole is waiting to be mated to another.</summary>
+        public bool HasAnchoredHole => anchoredHole.IsValid;
 
         /// <summary>The hole currently under the crosshair, if any.</summary>
         public HoleHit AimedHole => aimedHole;
@@ -258,6 +268,21 @@ namespace VexDesigner.Parts
 
             UpdateHoleAim();
 
+            // Right-click anchors a hole; the next left-click on another hole
+            // brings the anchored part to it. Checked before the ordinary click
+            // handling, or the second click would pick the part up instead.
+            if (pointer.SecondaryPressedThisFrame)
+            {
+                ToggleAnchor();
+                return;
+            }
+
+            if (anchoredHole.IsValid && pointer.PrimaryPressedThisFrame && HasHoleTarget)
+            {
+                CompleteMate();
+                return;
+            }
+
             if (hovered != null && pointer.PrimaryPressedThisFrame)
             {
                 // The click may destroy the hovered object - paging the shelf
@@ -306,6 +331,17 @@ namespace VexDesigner.Parts
             aimMarker.SetColour(farSide ? farHoleColour : nearHoleColour);
             aimMarker.Show(hit);
 
+            // Re-resolve the anchor every frame so its marker tracks its part.
+            // The part can still be walked around, grabbed and moved while a
+            // mate is pending, and a marker left at stale world coordinates
+            // would float away from the hole it belongs to.
+            if (anchoredHole.IsValid && anchorMarker != null)
+            {
+                anchoredHole = anchoredHole.Part.FaceAt(
+                    anchoredHole.HoleIndex, anchoredHole.IsBackFace);
+                anchorMarker.Show(anchoredHole);
+            }
+
             var highlight = holes.GetComponent<Highlightable>();
             if (!ReferenceEquals(highlight, dimmed))
             {
@@ -317,6 +353,58 @@ namespace VexDesigner.Parts
             {
                 dimmed.HoverScale = partDimWhileAiming;
             }
+        }
+
+        /// <summary>
+        /// Anchors the hole under the crosshair, or clears the anchor.
+        ///
+        /// The anchored part is the one that will move. That is the way round
+        /// it has to be: the user picks the piece they are holding conceptually,
+        /// then points at where it should go.
+        /// </summary>
+        private void ToggleAnchor()
+        {
+            if (anchoredHole.IsValid)
+            {
+                ClearAnchor();
+                MessageBanner.Info("Mate cancelled");
+                return;
+            }
+
+            if (!HasHoleTarget)
+            {
+                return;
+            }
+
+            anchoredHole = aimedHole;
+
+            anchorMarker ??= HoleHighlighter.Create("AnchoredHole", anchorColour);
+            anchorMarker.SetColour(anchorColour);
+            anchorMarker.Show(anchoredHole);
+
+            MessageBanner.Info("Hole anchored — click another hole to mate");
+        }
+
+        private void CompleteMate()
+        {
+            if (aimedHole.Part == anchoredHole.Part)
+            {
+                MessageBanner.Warn("Pick a hole on a different part");
+                return;
+            }
+
+            if (HoleMating.Mate(anchoredHole, aimedHole))
+            {
+                MessageBanner.Info("Mated — not joined until a screw goes through");
+            }
+
+            ClearAnchor();
+        }
+
+        private void ClearAnchor()
+        {
+            anchoredHole = default;
+            anchorMarker?.Hide();
         }
 
         private void ClearHoleAim()
