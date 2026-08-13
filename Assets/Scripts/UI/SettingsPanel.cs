@@ -5,14 +5,19 @@ namespace VexDesigner.UI
     using UnityEngine.UI;
 
     /// <summary>
-    /// Settings. Some of these do something now; the rest are placed so the
-    /// shape of the page is settled before the systems behind them exist.
+    /// Settings, edited then applied.
     ///
-    /// The quality control currently drives shadows and lighting. It is
-    /// eventually meant to drive **part mesh density**, which is the setting
-    /// that will actually matter here - a robot is hundreds of parts at tens of
-    /// thousands of triangles each. That swap is noted rather than hidden,
-    /// because the control's name should not quietly change meaning later.
+    /// Changes are held pending until Apply rather than taking effect as the
+    /// control moves. That matters for the ones that are disruptive to preview
+    /// - a resolution change mid-drag would resize the window on every step of
+    /// the slider - and it gives a clear way to abandon a change by leaving
+    /// without applying.
+    ///
+    /// The quality control currently drives shadows. It is eventually meant to
+    /// drive **part mesh density**, which is the setting that will actually
+    /// matter here: a robot is hundreds of parts at tens of thousands of
+    /// triangles each. That swap is stated on the page rather than hidden, so
+    /// the control does not quietly change meaning later.
     /// </summary>
     public sealed class SettingsPanel : MonoBehaviour
     {
@@ -22,59 +27,142 @@ namespace VexDesigner.UI
 
         [Header("Quality")]
         [SerializeField] private Slider qualitySlider;
-        [SerializeField] private TextMeshProUGUI qualityLabel;
+        [SerializeField] private TextMeshProUGUI qualityValue;
 
         [Header("Controls")]
         [SerializeField] private Slider sensitivitySlider;
-        [SerializeField] private TextMeshProUGUI sensitivityLabel;
+        [SerializeField] private TextMeshProUGUI sensitivityValue;
+
+        [Header("Audio")]
+        [SerializeField] private Slider volumeSlider;
+        [SerializeField] private TextMeshProUGUI volumeValue;
 
         [Header("Snapping")]
         [SerializeField] private TMP_InputField moveSnapField;
         [SerializeField] private TMP_InputField rotateSnapField;
 
-        [Header("Audio")]
-        [SerializeField] private Slider volumeSlider;
+        [Header("Status")]
+        [SerializeField] private TextMeshProUGUI statusLabel;
 
         private Resolution[] resolutions;
+        private bool wired;
 
-        private void Start()
+        private const string KeyQuality = "vex.quality";
+        private const string KeySensitivity = "vex.sensitivity";
+        private const string KeyVolume = "vex.volume";
+        private const string KeySnapMove = "vex.snap.move";
+        private const string KeySnapRotate = "vex.snap.rotate";
+
+        private void OnEnable()
         {
-            BuildResolutionList();
-            LoadValues();
+            if (!wired)
+            {
+                BuildResolutionList();
+                WireLabels();
+                wired = true;
+            }
+
+            // Reload from saved every time the page opens, so leaving without
+            // applying genuinely discards the changes rather than leaving the
+            // controls showing values that are not in effect.
+            LoadIntoControls();
+            SetStatus(string.Empty);
+        }
+
+        // ------------------------------------------------------------------
+        // Apply
+        // ------------------------------------------------------------------
+
+        /// <summary>Commits every pending value and saves it.</summary>
+        public void Apply()
+        {
+            if (qualitySlider != null)
+            {
+                PlayerPrefs.SetInt(KeyQuality, Mathf.RoundToInt(qualitySlider.value));
+            }
+
+            if (sensitivitySlider != null)
+            {
+                PlayerPrefs.SetFloat(KeySensitivity, sensitivitySlider.value);
+            }
+
+            if (volumeSlider != null)
+            {
+                PlayerPrefs.SetFloat(KeyVolume, volumeSlider.value);
+            }
+
+            if (moveSnapField != null &&
+                float.TryParse(moveSnapField.text, out float moveSnap) && moveSnap > 0f)
+            {
+                PlayerPrefs.SetFloat(KeySnapMove, moveSnap);
+            }
+
+            if (rotateSnapField != null &&
+                float.TryParse(rotateSnapField.text, out float rotateSnap) && rotateSnap > 0f)
+            {
+                PlayerPrefs.SetFloat(KeySnapRotate, rotateSnap);
+            }
+
+            PlayerPrefs.Save();
+            ApplySaved();
+            ApplyDisplay();
+
+            SetStatus("Applied.");
+        }
+
+        private void ApplyDisplay()
+        {
+            if (fullscreenToggle != null)
+            {
+                Screen.fullScreenMode = fullscreenToggle.isOn
+                    ? FullScreenMode.FullScreenWindow
+                    : FullScreenMode.Windowed;
+            }
+
+            if (resolutionDropdown != null && resolutions != null &&
+                resolutionDropdown.value >= 0 && resolutionDropdown.value < resolutions.Length)
+            {
+                Resolution r = resolutions[resolutionDropdown.value];
+                Screen.SetResolution(r.width, r.height, Screen.fullScreenMode);
+            }
         }
 
         /// <summary>
         /// Applies saved preferences without needing the settings page.
         ///
         /// The page lives on a disabled object until it is first opened, so its
-        /// Start never runs before then. Without this, a saved sensitivity or
-        /// snap increment would sit unused until the user happened to visit
-        /// settings - which looks exactly like the setting not persisting.
+        /// own startup never runs before then. Without this, a saved
+        /// sensitivity or snap increment would sit unused until the user
+        /// happened to visit settings - which looks exactly like the setting
+        /// not persisting.
         /// </summary>
         public static void ApplySaved()
         {
-            AudioListener.volume = PlayerPrefs.GetFloat("vex.volume", 1f);
+            AudioListener.volume = PlayerPrefs.GetFloat(KeyVolume, 1f);
 
             var input = FindAnyObjectByType<VexDesigner.InputSources.FirstPersonInput>();
             if (input != null)
             {
-                input.SetLookSensitivity(PlayerPrefs.GetFloat("vex.sensitivity", 0.12f));
+                input.SetLookSensitivity(PlayerPrefs.GetFloat(KeySensitivity, 0.12f));
             }
 
             var tool = FindAnyObjectByType<VexDesigner.Parts.TransformToolController>();
             if (tool != null)
             {
-                tool.SetMoveSnapInches(PlayerPrefs.GetFloat("vex.snap.move", 0.5f));
-                tool.SetRotationSnapDegrees(PlayerPrefs.GetFloat("vex.snap.rotate", 15f));
+                tool.SetMoveSnapInches(PlayerPrefs.GetFloat(KeySnapMove, 0.5f));
+                tool.SetRotationSnapDegrees(PlayerPrefs.GetFloat(KeySnapRotate, 15f));
             }
 
-            ApplyQuality(PlayerPrefs.GetInt("vex.quality", 2));
+            ApplyQuality(PlayerPrefs.GetInt(KeyQuality, 2));
         }
 
         private static void ApplyQuality(int level)
         {
             level = Mathf.Clamp(level, 0, 3);
 
+            // Shadows are the single biggest lighting cost in a room lit by
+            // three point lights, so they are what the slider actually moves
+            // today.
             switch (level)
             {
                 case 0:
@@ -100,7 +188,7 @@ namespace VexDesigner.UI
         }
 
         // ------------------------------------------------------------------
-        // Display
+        // Controls
         // ------------------------------------------------------------------
 
         private void BuildResolutionList()
@@ -114,175 +202,136 @@ namespace VexDesigner.UI
             resolutionDropdown.ClearOptions();
 
             var options = new System.Collections.Generic.List<string>();
-            int current = 0;
-
-            for (int i = 0; i < resolutions.Length; i++)
+            foreach (Resolution r in resolutions)
             {
-                Resolution r = resolutions[i];
                 options.Add($"{r.width} x {r.height}");
-
-                if (r.width == Screen.width && r.height == Screen.height)
-                {
-                    current = i;
-                }
             }
 
             resolutionDropdown.AddOptions(options);
-            resolutionDropdown.value = current;
-            resolutionDropdown.RefreshShownValue();
-            resolutionDropdown.onValueChanged.AddListener(OnResolutionChanged);
         }
 
-        private void OnResolutionChanged(int index)
+        /// <summary>
+        /// Live numeric readouts. These update as the control moves even though
+        /// the value is not applied yet - a slider with no number beside it is
+        /// guesswork.
+        /// </summary>
+        private void WireLabels()
         {
-            if (resolutions == null || index < 0 || index >= resolutions.Length)
-            {
-                return;
-            }
-
-            Resolution r = resolutions[index];
-            Screen.SetResolution(r.width, r.height, Screen.fullScreenMode);
-        }
-
-        public void OnFullscreenChanged(bool value)
-        {
-            Screen.fullScreenMode = value
-                ? FullScreenMode.FullScreenWindow
-                : FullScreenMode.Windowed;
-        }
-
-        // ------------------------------------------------------------------
-        // Quality
-        // ------------------------------------------------------------------
-
-        public void OnQualityChanged(float value)
-        {
-            int level = Mathf.Clamp(Mathf.RoundToInt(value), 0, 3);
-
-            // Shadows are the single biggest lighting cost in a room lit by
-            // three point lights, so they are what the slider actually moves
-            // today.
-            ApplyQuality(level);
-
-            if (qualityLabel != null)
-            {
-                string[] names = { "Low", "Medium", "High", "Ultra" };
-                qualityLabel.text = $"Quality: {names[level]}";
-            }
-
-            PlayerPrefs.SetInt("vex.quality", level);
-        }
-
-        // ------------------------------------------------------------------
-        // Controls
-        // ------------------------------------------------------------------
-
-        public void OnSensitivityChanged(float value)
-        {
-            PlayerPrefs.SetFloat("vex.sensitivity", value);
-
-            if (sensitivityLabel != null)
-            {
-                sensitivityLabel.text = $"Look sensitivity: {value:F2}";
-            }
-
-            var input = FindAnyObjectByType<VexDesigner.InputSources.FirstPersonInput>();
-            if (input != null)
-            {
-                input.SetLookSensitivity(value);
-            }
-        }
-
-        public void OnMoveSnapChanged(string text)
-        {
-            if (!float.TryParse(text, out float inches) || inches <= 0f)
-            {
-                return;
-            }
-
-            PlayerPrefs.SetFloat("vex.snap.move", inches);
-
-            var tool = FindAnyObjectByType<VexDesigner.Parts.TransformToolController>();
-            if (tool != null)
-            {
-                tool.SetMoveSnapInches(inches);
-            }
-        }
-
-        public void OnRotateSnapChanged(string text)
-        {
-            if (!float.TryParse(text, out float degrees) || degrees <= 0f)
-            {
-                return;
-            }
-
-            PlayerPrefs.SetFloat("vex.snap.rotate", degrees);
-
-            var tool = FindAnyObjectByType<VexDesigner.Parts.TransformToolController>();
-            if (tool != null)
-            {
-                tool.SetRotationSnapDegrees(degrees);
-            }
-        }
-
-        public void OnVolumeChanged(float value)
-        {
-            AudioListener.volume = Mathf.Clamp01(value);
-            PlayerPrefs.SetFloat("vex.volume", value);
-        }
-
-        // ------------------------------------------------------------------
-        // Persistence
-        // ------------------------------------------------------------------
-
-        private void LoadValues()
-        {
-            // PlayerPrefs rather than a settings file: these are per-machine
-            // preferences, not part of a build, and should not travel with a
-            // saved robot.
             if (qualitySlider != null)
             {
-                qualitySlider.SetValueWithoutNotify(PlayerPrefs.GetInt("vex.quality", 2));
-                OnQualityChanged(qualitySlider.value);
-                qualitySlider.onValueChanged.AddListener(OnQualityChanged);
+                qualitySlider.onValueChanged.AddListener(v =>
+                {
+                    string[] names = { "Low", "Medium", "High", "Ultra" };
+                    SetText(qualityValue, names[Mathf.Clamp(Mathf.RoundToInt(v), 0, 3)]);
+                    SetStatus("Not applied");
+                });
+            }
+
+            if (sensitivitySlider != null)
+            {
+                sensitivitySlider.onValueChanged.AddListener(v =>
+                {
+                    SetText(sensitivityValue, v.ToString("0.00"));
+                    SetStatus("Not applied");
+                });
+            }
+
+            if (volumeSlider != null)
+            {
+                volumeSlider.onValueChanged.AddListener(v =>
+                {
+                    SetText(volumeValue, $"{Mathf.RoundToInt(v * 100f)}%");
+                    SetStatus("Not applied");
+                });
+            }
+
+            if (moveSnapField != null)
+            {
+                moveSnapField.onValueChanged.AddListener(_ => SetStatus("Not applied"));
+            }
+
+            if (rotateSnapField != null)
+            {
+                rotateSnapField.onValueChanged.AddListener(_ => SetStatus("Not applied"));
+            }
+
+            if (resolutionDropdown != null)
+            {
+                resolutionDropdown.onValueChanged.AddListener(_ => SetStatus("Not applied"));
+            }
+
+            if (fullscreenToggle != null)
+            {
+                fullscreenToggle.onValueChanged.AddListener(_ => SetStatus("Not applied"));
+            }
+        }
+
+        private void LoadIntoControls()
+        {
+            if (qualitySlider != null)
+            {
+                qualitySlider.SetValueWithoutNotify(PlayerPrefs.GetInt(KeyQuality, 2));
+                string[] names = { "Low", "Medium", "High", "Ultra" };
+                SetText(qualityValue, names[Mathf.Clamp((int)qualitySlider.value, 0, 3)]);
             }
 
             if (sensitivitySlider != null)
             {
                 sensitivitySlider.SetValueWithoutNotify(
-                    PlayerPrefs.GetFloat("vex.sensitivity", 0.12f));
-                OnSensitivityChanged(sensitivitySlider.value);
-                sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
+                    PlayerPrefs.GetFloat(KeySensitivity, 0.12f));
+                SetText(sensitivityValue, sensitivitySlider.value.ToString("0.00"));
             }
 
             if (volumeSlider != null)
             {
-                volumeSlider.SetValueWithoutNotify(PlayerPrefs.GetFloat("vex.volume", 1f));
-                OnVolumeChanged(volumeSlider.value);
-                volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
+                volumeSlider.SetValueWithoutNotify(PlayerPrefs.GetFloat(KeyVolume, 1f));
+                SetText(volumeValue, $"{Mathf.RoundToInt(volumeSlider.value * 100f)}%");
             }
 
             if (moveSnapField != null)
             {
                 moveSnapField.SetTextWithoutNotify(
-                    PlayerPrefs.GetFloat("vex.snap.move", 0.5f).ToString("0.###"));
-                OnMoveSnapChanged(moveSnapField.text);
-                moveSnapField.onEndEdit.AddListener(OnMoveSnapChanged);
+                    PlayerPrefs.GetFloat(KeySnapMove, 0.5f).ToString("0.###"));
             }
 
             if (rotateSnapField != null)
             {
                 rotateSnapField.SetTextWithoutNotify(
-                    PlayerPrefs.GetFloat("vex.snap.rotate", 15f).ToString("0.###"));
-                OnRotateSnapChanged(rotateSnapField.text);
-                rotateSnapField.onEndEdit.AddListener(OnRotateSnapChanged);
+                    PlayerPrefs.GetFloat(KeySnapRotate, 15f).ToString("0.###"));
             }
 
             if (fullscreenToggle != null)
             {
                 fullscreenToggle.SetIsOnWithoutNotify(Screen.fullScreen);
-                fullscreenToggle.onValueChanged.AddListener(OnFullscreenChanged);
             }
+
+            if (resolutionDropdown != null && resolutions != null)
+            {
+                for (int i = 0; i < resolutions.Length; i++)
+                {
+                    if (resolutions[i].width == Screen.width &&
+                        resolutions[i].height == Screen.height)
+                    {
+                        resolutionDropdown.SetValueWithoutNotify(i);
+                        break;
+                    }
+                }
+
+                resolutionDropdown.RefreshShownValue();
+            }
+        }
+
+        private static void SetText(TextMeshProUGUI label, string value)
+        {
+            if (label != null)
+            {
+                label.text = value;
+            }
+        }
+
+        private void SetStatus(string message)
+        {
+            SetText(statusLabel, message);
         }
     }
 }

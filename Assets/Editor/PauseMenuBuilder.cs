@@ -82,7 +82,7 @@ namespace VexDesigner.EditorTools
 
         private static GameObject BuildSettingsPage(Transform parent, PauseMenu menu)
         {
-            GameObject page = Column(parent, "SettingsPage", 560f);
+            GameObject page = Column(parent, "SettingsPage", 620f);
             var panel = page.AddComponent<SettingsPanel>();
 
             Title(page.transform, "SETTINGS");
@@ -90,35 +90,58 @@ namespace VexDesigner.EditorTools
             TMP_Dropdown resolution = DropdownRow(page.transform, "Resolution");
             Toggle fullscreen = ToggleRow(page.transform, "Fullscreen");
 
-            Slider quality = SliderRow(page.transform, "Quality", 0f, 3f, true, out TextMeshProUGUI qualityLabel);
-            Slider sensitivity = SliderRow(page.transform, "Look sensitivity", 0.02f, 0.4f, false, out TextMeshProUGUI sensLabel);
-            Slider volume = SliderRow(page.transform, "Volume", 0f, 1f, false, out _);
+            Slider quality = SliderRow(page.transform, "Quality", 0f, 3f, true, out var qualityValue);
+            Slider sensitivity = SliderRow(page.transform, "Look sensitivity", 0.02f, 0.4f, false, out var sensValue);
+            Slider volume = SliderRow(page.transform, "Volume", 0f, 1f, false, out var volumeValue);
 
             TMP_InputField moveSnap = InputRow(page.transform, "Move snap (in)");
             TMP_InputField rotateSnap = InputRow(page.transform, "Rotate snap (deg)");
 
             Note(page.transform,
                 "Quality currently drives shadows. It will drive part mesh " +
-                "density once import quality exists — that is the setting that " +
-                "will matter with hundreds of parts on screen.");
+                "density once import quality exists — that is the setting " +
+                "that will matter with hundreds of parts on screen.");
 
-            Spacer(page.transform, 10f);
-            Button(page.transform, "Back", AccentColour, menu, nameof(PauseMenu.ShowMain));
+            TextMeshProUGUI status = Status(page.transform);
+
+            Spacer(page.transform, 8f);
+
+            // Apply commits; Back leaves without committing. Reopening reloads
+            // from saved, so leaving really does discard.
+            Button(page.transform, "Apply", AccentColour, panel, nameof(SettingsPanel.Apply));
+            Button(page.transform, "Back", ButtonColour, menu, nameof(PauseMenu.ShowMain));
 
             var so = new SerializedObject(panel);
             so.FindProperty("resolutionDropdown").objectReferenceValue = resolution;
             so.FindProperty("fullscreenToggle").objectReferenceValue = fullscreen;
             so.FindProperty("qualitySlider").objectReferenceValue = quality;
-            so.FindProperty("qualityLabel").objectReferenceValue = qualityLabel;
+            so.FindProperty("qualityValue").objectReferenceValue = qualityValue;
             so.FindProperty("sensitivitySlider").objectReferenceValue = sensitivity;
-            so.FindProperty("sensitivityLabel").objectReferenceValue = sensLabel;
+            so.FindProperty("sensitivityValue").objectReferenceValue = sensValue;
             so.FindProperty("volumeSlider").objectReferenceValue = volume;
+            so.FindProperty("volumeValue").objectReferenceValue = volumeValue;
             so.FindProperty("moveSnapField").objectReferenceValue = moveSnap;
             so.FindProperty("rotateSnapField").objectReferenceValue = rotateSnap;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             page.SetActive(false);
             return page;
+        }
+
+        private static TextMeshProUGUI Status(Transform parent)
+        {
+            var go = new GameObject("Status", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+
+            var label = go.AddComponent<TextMeshProUGUI>();
+            label.text = string.Empty;
+            label.fontSize = 15f;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = new Color(1f, 0.78f, 0.35f, 1f);
+
+            go.AddComponent<LayoutElement>().minHeight = 22f;
+            return label;
         }
 
         // ------------------------------------------------------------------
@@ -192,7 +215,7 @@ namespace VexDesigner.EditorTools
         }
 
         private static void Button(
-            Transform parent, string text, Color colour, PauseMenu menu, string method)
+            Transform parent, string text, Color colour, Component target, string method)
         {
             var go = new GameObject($"Button_{text}", typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -222,44 +245,99 @@ namespace VexDesigner.EditorTools
 
             // Persistent listener rather than a runtime AddListener, so the
             // wiring is visible in the Inspector and survives being saved.
-            var target = System.Delegate.CreateDelegate(
-                typeof(UnityEngine.Events.UnityAction), menu, method)
+            var call = System.Delegate.CreateDelegate(
+                typeof(UnityEngine.Events.UnityAction), target, method)
                 as UnityEngine.Events.UnityAction;
 
-            UnityEventTools.AddPersistentListener(button.onClick, target);
+            UnityEventTools.AddPersistentListener(button.onClick, call);
         }
 
+        /// <summary>
+        /// A labelled slider with a live numeric readout.
+        ///
+        /// Every child sets a preferred *height* as well as a width. Inside a
+        /// HorizontalLayoutGroup that controls child height, an element with
+        /// only a preferred width collapses to zero pixels tall - which is why
+        /// the first version's sliders, dropdown and input fields were present
+        /// in the hierarchy but completely invisible.
+        /// </summary>
         private static Slider SliderRow(
             Transform parent, string caption, float min, float max, bool wholeNumbers,
-            out TextMeshProUGUI captionLabel)
+            out TextMeshProUGUI valueLabel)
         {
-            GameObject row = Row(parent, caption, out captionLabel);
+            GameObject row = Row(parent, caption, out _);
 
             var sliderGo = new GameObject("Slider", typeof(RectTransform));
             sliderGo.transform.SetParent(row.transform, false);
-            sliderGo.AddComponent<LayoutElement>().preferredWidth = 170f;
+
+            var element = sliderGo.AddComponent<LayoutElement>();
+            element.preferredWidth = 190f;
+            element.preferredHeight = 20f;
 
             var slider = sliderGo.AddComponent<Slider>();
             slider.minValue = min;
             slider.maxValue = max;
             slider.wholeNumbers = wholeNumbers;
 
+            // Track, inset vertically so it reads as a groove rather than a bar
+            // filling the whole row.
             var background = new GameObject("Background", typeof(RectTransform));
             background.transform.SetParent(sliderGo.transform, false);
-            Stretch(background.GetComponent<RectTransform>());
+            var backRect = background.GetComponent<RectTransform>();
+            backRect.anchorMin = new Vector2(0f, 0.5f);
+            backRect.anchorMax = new Vector2(1f, 0.5f);
+            backRect.sizeDelta = new Vector2(0f, 6f);
+            backRect.anchoredPosition = Vector2.zero;
             background.AddComponent<Image>().color = new Color(0.10f, 0.11f, 0.13f, 1f);
 
             var fillArea = new GameObject("Fill Area", typeof(RectTransform));
             fillArea.transform.SetParent(sliderGo.transform, false);
-            Stretch(fillArea.GetComponent<RectTransform>());
+            var fillAreaRect = fillArea.GetComponent<RectTransform>();
+            fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
+            fillAreaRect.anchorMax = new Vector2(1f, 0.5f);
+            fillAreaRect.sizeDelta = new Vector2(-10f, 6f);
+            fillAreaRect.anchoredPosition = Vector2.zero;
 
             var fill = new GameObject("Fill", typeof(RectTransform));
             fill.transform.SetParent(fillArea.transform, false);
-            Stretch(fill.GetComponent<RectTransform>());
+            var fillRect = fill.GetComponent<RectTransform>();
+            fillRect.sizeDelta = new Vector2(10f, 0f);
             fill.AddComponent<Image>().color = AccentColour;
 
-            slider.fillRect = fill.GetComponent<RectTransform>();
-            slider.targetGraphic = background.GetComponent<Image>();
+            // The handle is what makes it look like a slider rather than a
+            // progress bar, and gives a target big enough to grab.
+            var handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
+            handleArea.transform.SetParent(sliderGo.transform, false);
+            var handleAreaRect = handleArea.GetComponent<RectTransform>();
+            handleAreaRect.anchorMin = new Vector2(0f, 0f);
+            handleAreaRect.anchorMax = new Vector2(1f, 1f);
+            handleAreaRect.sizeDelta = new Vector2(-16f, 0f);
+            handleAreaRect.anchoredPosition = Vector2.zero;
+
+            var handle = new GameObject("Handle", typeof(RectTransform));
+            handle.transform.SetParent(handleArea.transform, false);
+            var handleRect = handle.GetComponent<RectTransform>();
+            handleRect.sizeDelta = new Vector2(16f, 20f);
+            handle.AddComponent<Image>().color = new Color(0.86f, 0.89f, 0.94f, 1f);
+
+            slider.fillRect = fillRect;
+            slider.handleRect = handleRect;
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.direction = Slider.Direction.LeftToRight;
+
+            // Readout on the right, so a value can be set to a number rather
+            // than to a position.
+            var valueGo = new GameObject("Value", typeof(RectTransform));
+            valueGo.transform.SetParent(row.transform, false);
+
+            var valueElement = valueGo.AddComponent<LayoutElement>();
+            valueElement.preferredWidth = 62f;
+            valueElement.preferredHeight = 20f;
+
+            valueLabel = valueGo.AddComponent<TextMeshProUGUI>();
+            valueLabel.fontSize = 15f;
+            valueLabel.color = new Color(0.72f, 0.78f, 0.86f, 1f);
+            valueLabel.alignment = TextAlignmentOptions.Right;
 
             return slider;
         }
@@ -270,7 +348,9 @@ namespace VexDesigner.EditorTools
 
             var go = new GameObject("Dropdown", typeof(RectTransform));
             go.transform.SetParent(row.transform, false);
-            go.AddComponent<LayoutElement>().preferredWidth = 170f;
+            var dropElement = go.AddComponent<LayoutElement>();
+            dropElement.preferredWidth = 190f;
+            dropElement.preferredHeight = 28f;
 
             go.AddComponent<Image>().color = ButtonColour;
             var dropdown = go.AddComponent<TMP_Dropdown>();
@@ -386,7 +466,9 @@ namespace VexDesigner.EditorTools
 
             var go = new GameObject("Input", typeof(RectTransform));
             go.transform.SetParent(row.transform, false);
-            go.AddComponent<LayoutElement>().preferredWidth = 90f;
+            var inputElement = go.AddComponent<LayoutElement>();
+            inputElement.preferredWidth = 110f;
+            inputElement.preferredHeight = 28f;
             go.AddComponent<Image>().color = new Color(0.10f, 0.11f, 0.13f, 1f);
 
             var field = go.AddComponent<TMP_InputField>();
@@ -425,11 +507,13 @@ namespace VexDesigner.EditorTools
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
 
-            row.AddComponent<LayoutElement>().minHeight = 32f;
+            row.AddComponent<LayoutElement>().minHeight = 34f;
 
             var labelGo = new GameObject("Caption", typeof(RectTransform));
             labelGo.transform.SetParent(row.transform, false);
-            labelGo.AddComponent<LayoutElement>().preferredWidth = 200f;
+            var captionElement = labelGo.AddComponent<LayoutElement>();
+            captionElement.preferredWidth = 190f;
+            captionElement.preferredHeight = 24f;
 
             captionLabel = labelGo.AddComponent<TextMeshProUGUI>();
             captionLabel.text = caption;
