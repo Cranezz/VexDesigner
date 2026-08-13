@@ -31,7 +31,7 @@ namespace VexDesigner.EditorTools
         ///
         /// Screw figures come from the weight table in Protobot Rebuilt, where
         /// they were measured rather than calculated. The C-channel figure is
-        /// VEX's published 0.157 lb.
+        /// VEX's published 0.157 lb, converted.
         /// </summary>
         private static readonly Dictionary<string, float> MassGramsBySku =
             new Dictionary<string, float>
@@ -133,19 +133,29 @@ namespace VexDesigner.EditorTools
             if (isNew)
             {
                 definition = ScriptableObject.CreateInstance<PartDefinition>();
-                definition.displayName = Prettify(key);
+            }
+
+            // An asset written before the fields were reorganised deserialises
+            // with the new blocks empty, because Unity simply drops values it
+            // no longer has a field for. Treat "no name yet" as unpopulated and
+            // fill it in, or every existing part would come back blank.
+            bool needsBootstrap = isNew || string.IsNullOrEmpty(definition.data.partName);
+
+            if (needsBootstrap)
+            {
+                definition.data.partName = Prettify(key);
             }
 
             // Part IDs are authored by hand and never touched again.
             //
-            // A suggestion is filled in on creation - the SKU if the file name
-            // carries one - but a rebuild must never overwrite it. These IDs
-            // are what save files reference, so a rebuild silently renaming
+            // A suggestion is filled in the first time - the SKU if the file
+            // name carries one - but a rebuild must never overwrite it. These
+            // IDs are what save files reference, so a rebuild silently renaming
             // them would orphan every robot ever built.
-            if (isNew)
+            if (string.IsNullOrEmpty(definition.saving.id))
             {
                 string sku = ExtractSku(key);
-                definition.partId = string.IsNullOrEmpty(sku) ? key : sku;
+                definition.saving.id = string.IsNullOrEmpty(sku) ? key : sku;
             }
 
             // The mesh reference is always refreshed: re-exporting a part at a
@@ -157,7 +167,7 @@ namespace VexDesigner.EditorTools
             // field still holds its default. These are starting points meant to
             // be corrected by hand in the Inspector, so a deliberate change
             // must never be overwritten by a rebuild.
-            Classify(definition, key, isNew);
+            Classify(definition, key, needsBootstrap);
 
             bool weighed = TryApplyMass(definition, key);
 
@@ -173,7 +183,7 @@ namespace VexDesigner.EditorTools
             Debug.Log(
                 $"[PartLibrary] {definition.displayName}: " +
                 $"{definition.LongestDimensionInches:F3} in long, " +
-                $"{definition.weightPounds:F5} lb ({definition.MassGrams:F2} g)" +
+                $"{definition.data.weightGrams:F2} g" +
                 $"{(weighed ? "" : "  (estimated)")}, " +
                 $"{definition.partClass}/{definition.subClass}");
 
@@ -183,18 +193,16 @@ namespace VexDesigner.EditorTools
         /// <summary>Density of 6061 aluminium, grams per cubic centimetre.</summary>
         private const float AluminiumDensity = 2.70f;
 
-        private const float GramsToPounds = 1f / 453.59237f;
-
         private static bool TryApplyMass(PartDefinition definition, string key)
         {
-            // The source table is in grams because that is how the measurements
-            // were taken; definitions store pounds because that is what VEX
-            // publishes. Converting here keeps both honest to their origin.
+            // Both the table and the definitions are in grams: small VEX
+            // parts are fractions of a pound, so grams keep the numbers
+            // legible - a screw is 0.5 g rather than 0.0011 lb.
             foreach (KeyValuePair<string, float> entry in MassGramsBySku)
             {
                 if (key.Contains(entry.Key))
                 {
-                    definition.weightPounds = entry.Value * GramsToPounds;
+                    definition.data.weightGrams = entry.Value;
                     return true;
                 }
             }
@@ -208,7 +216,7 @@ namespace VexDesigner.EditorTools
             float grams = EstimateMassGrams(definition.mesh);
             if (grams > 0f)
             {
-                definition.weightPounds = grams * GramsToPounds;
+                definition.data.weightGrams = grams;
             }
 
             return false;
@@ -255,18 +263,18 @@ namespace VexDesigner.EditorTools
 
             PartSubClass sub = GuessSubClass(name);
 
-            if (isNew || definition.subClass == PartSubClass.Unknown)
+            if (isNew || definition.data.subClass == PartSubClass.Unknown)
             {
-                definition.subClass = sub;
-                definition.partClass = ClassFor(sub);
+                definition.data.subClass = sub;
+                definition.data.partClass = ClassFor(sub);
             }
 
-            if (isNew || definition.material == PartMaterial.Aluminium)
+            if (isNew || definition.data.material == PartMaterial.Aluminium)
             {
                 // Fasteners and shafts are steel; structure is aluminium. They
                 // ring at audibly different pitches, and a screw that sounds
                 // like a C-channel is noticed immediately.
-                definition.material = IsSteel(definition.subClass)
+                definition.data.material = IsSteel(definition.data.subClass)
                     ? PartMaterial.Steel
                     : PartMaterial.Aluminium;
             }
@@ -276,9 +284,9 @@ namespace VexDesigner.EditorTools
                 // Only structural extrusion goes on the saw, and only structure
                 // carries the hole grid. Getting these wrong wastes hole
                 // detection on wheels and offers to cut screws in half.
-                definition.cuttable = IsCuttable(definition.subClass);
-                definition.hasHolePattern = HasHoles(definition.subClass);
-                definition.sizeDesignation = ExtractSizeDesignation(key);
+                definition.data.cuttable = IsCuttable(definition.data.subClass);
+                definition.data.hasHoles = HasHoles(definition.data.subClass);
+                definition.data.data1 = ExtractSizeDesignation(key);
             }
         }
 

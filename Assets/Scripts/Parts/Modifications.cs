@@ -47,7 +47,10 @@ namespace VexDesigner.Parts
     }
 
     /// <summary>
-    /// The ordered list of cuts taken out of one part instance.
+    /// Everything done to one specific part after it left the shelf.
+    ///
+    /// Currently the ordered list of cuts; paint and other alterations belong
+    /// here too when they exist.
     ///
     /// Deliberately separate from <see cref="PartDefinition"/>: the definition
     /// describes a part *type* and is shared by every copy, whereas cuts belong
@@ -58,7 +61,7 @@ namespace VexDesigner.Parts
     /// these planes to the pristine imported mesh, in order, which is why
     /// geometry cannot degrade across save and load cycles.
     /// </summary>
-    public sealed class PartCuts : MonoBehaviour
+    public sealed class Modifications : MonoBehaviour
     {
         [SerializeField] private List<CutOperation> cuts = new List<CutOperation>();
 

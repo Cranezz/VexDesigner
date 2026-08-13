@@ -77,6 +77,14 @@ namespace VexDesigner.Parts
         private Vector2 rotateScreenTangent;
 
         private float rotateAccumulated;
+
+        /// <summary>
+        /// Rotation actually applied, as opposed to the raw amount asked for.
+        /// The two differ while snapping, and the sweep arc has to follow this
+        /// one - an arc drawn from the raw total would sit between the ticks
+        /// while the part sat on one.
+        /// </summary>
+        private float rotateApplied;
         private MeshRenderer arcRenderer;
         private Mesh arcMesh;
 
@@ -392,6 +400,7 @@ namespace VexDesigner.Parts
         private void BeginRotateDrag(Vector3 grabPoint)
         {
             rotateAccumulated = 0f;
+            rotateApplied = 0f;
 
             Camera cam = Camera.main;
             if (cam == null)
@@ -493,6 +502,7 @@ namespace VexDesigner.Parts
                     return;
                 }
 
+                rotateApplied += angle;
                 selection.Rotate(Quaternion.AngleAxis(angle, dragAxis), dragOrigin);
 
                 DrawRotationArc();
@@ -547,7 +557,7 @@ namespace VexDesigner.Parts
             // Wrap at a full turn rather than clamping. Past 360 degrees a
             // filled ring says nothing more, so it empties and begins again -
             // which also reads as "you have gone all the way round".
-            float sweep = rotateAccumulated % 360f;
+            float sweep = rotateApplied % 360f;
 
             if (Mathf.Abs(sweep) < 1f)
             {
@@ -574,6 +584,7 @@ namespace VexDesigner.Parts
 
             dragging = null;
             rotateAccumulated = 0f;
+            rotateApplied = 0f;
             interactionLock.MovementLocked = false;
 
             MeasurementDisplay.Hide();

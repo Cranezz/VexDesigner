@@ -28,10 +28,10 @@ namespace VexDesigner.UI
                  "size, so the gap stays proportional at any distance.")]
         [SerializeField] private float lineOffset = 0.6f;
 
-        [Tooltip("Label height as a fraction of the distance to the camera. " +
-                 "Constant apparent size, so it reads the same close up and " +
-                 "across the garage.")]
-        [SerializeField] private float screenScale = 0.055f;
+        [Tooltip("Distance, in metres, at which the label is drawn at its " +
+                 "authored size. Beyond it the label grows in world space to " +
+                 "keep the same size on screen; nearer, it shrinks.")]
+        [SerializeField] private float referenceDistance = 1.5f;
 
         private static MeasurementDisplay instance;
 
@@ -142,11 +142,14 @@ namespace VexDesigner.UI
             label.transform.rotation = Quaternion.LookRotation(toCamera, up);
 
             // Scale with distance so the number is the same size on screen
-            // wherever the part is. A world-sized label is unreadable across
-            // the garage and overwhelming up close, and a measurement that
-            // cannot be read is not a measurement.
+            // wherever the part is.
+            //
+            // Expressed as a ratio against a reference distance, not as a raw
+            // fraction. A raw fraction multiplied the authored font size by
+            // about 0.05 and shrank the label to a few millimetres tall, which
+            // is why it appeared to vanish entirely.
             float distance = Vector3.Distance(cam.transform.position, anchor);
-            float scale = Mathf.Max(distance * screenScale, 0.02f);
+            float scale = Mathf.Max(distance / Mathf.Max(0.01f, referenceDistance), 0.15f);
             label.transform.localScale = Vector3.one * scale;
 
             label.transform.position = anchor + (up * (lineOffset * scale));

@@ -44,6 +44,11 @@ namespace VexDesigner.Parts
             go.AddComponent<PickupHandle>();
             go.AddComponent<PartImpactAudio>();
 
+            // Per-instance alterations - cuts today, paint later. Added to
+            // every part rather than on first cut, so a save routine can read
+            // it without a null check and the Inspector always shows it.
+            go.AddComponent<Modifications>();
+
             var collider = go.AddComponent<MeshCollider>();
 
             // A non-convex MeshCollider cannot move under physics in Unity, so
