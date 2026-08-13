@@ -120,6 +120,18 @@ namespace VexDesigner.Parts
 
         public bool RelativeAxes => relativeAxes;
 
+        /// <summary>Snap increment for movement, in inches. Set from settings.</summary>
+        public void SetMoveSnapInches(float inches)
+        {
+            moveSnapInches = Mathf.Max(0.001f, inches);
+        }
+
+        /// <summary>Snap increment for rotation, in degrees. Set from settings.</summary>
+        public void SetRotationSnapDegrees(float degrees)
+        {
+            rotationSnapDegrees = Mathf.Max(0.1f, degrees);
+        }
+
         private void Awake()
         {
             pointer = GetComponentInChildren<IPointerInput>();

@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: Part_c-channel-1x2x1x35
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
   saving:
-    id: c-channel-1x2x1x35
+    id: CCHL-2
     legacyIds: []
   data:
-    partName: c channel 1x2x1x35
-    data1: 1x2x1x35
+    partName: C-Channel
+    data1: 2 Wide
     data2: 
     weightGrams: 71.2
     hasHoles: 1

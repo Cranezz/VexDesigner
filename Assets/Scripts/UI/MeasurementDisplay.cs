@@ -24,9 +24,11 @@ namespace VexDesigner.UI
                  "back into view, as a fraction of the viewport.")]
         [SerializeField] private float viewportMargin = 0.08f;
 
-        [Tooltip("How far the label sits off the trail, relative to its own " +
-                 "size, so the gap stays proportional at any distance.")]
-        [SerializeField] private float lineOffset = 0.6f;
+        [Tooltip("Gap between the trail and the label, in metres at the " +
+                 "reference distance. Roughly half a line of text - enough that " +
+                 "the line does not strike through the digits, close enough " +
+                 "that the number clearly belongs to it.")]
+        [SerializeField] private float lineOffset = 0.06f;
 
         [Tooltip("Distance, in metres, at which the label is drawn at its " +
                  "authored size. Beyond it the label grows in world space to " +

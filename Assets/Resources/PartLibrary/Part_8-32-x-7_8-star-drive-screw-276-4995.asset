@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Part_8-32-x-7_8-star-drive-screw-276-4995
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
   saving:
-    id: 276-4995
+    id: SCRW-0.875
     legacyIds: []
   data:
-    partName: 8 32 x 7/8 star drive screw 276 4995
+    partName: Screw 7/8
     data1: 
     data2: 
     weightGrams: 1

@@ -492,6 +492,7 @@ namespace VexDesigner.EditorTools
             BuildKeybindHints(canvasGo.transform);
             BuildMessageBanner(canvasGo.transform);
             BuildDeletionPreview(canvasGo.transform);
+            PauseMenuBuilder.Build(canvasGo.transform);
 
             var crosshair = canvasGo.AddComponent<Crosshair>();
             var so = new SerializedObject(crosshair);

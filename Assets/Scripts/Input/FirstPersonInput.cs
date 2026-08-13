@@ -88,6 +88,12 @@ namespace VexDesigner.InputSources
 
         private void OnDisable() => SetCursorLocked(false);
 
+        /// <summary>Degrees of look per pixel of mouse movement.</summary>
+        public void SetLookSensitivity(float value)
+        {
+            degreesPerPixel = Mathf.Clamp(value, 0.01f, 1f);
+        }
+
         public void SetCursorLocked(bool locked)
         {
             CursorLocked = locked;
