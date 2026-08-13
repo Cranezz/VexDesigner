@@ -1,5 +1,6 @@
 namespace VexDesigner.Parts
 {
+    using System.Collections.Generic;
     using UnityEngine;
     using VexDesigner.InputSources;
     using VexDesigner.UI;
@@ -25,6 +26,14 @@ namespace VexDesigner.Parts
         [SerializeField] private float screenScale = 0.16f;
 
         [SerializeField] private float aimDistance = 12f;
+
+        [Header("Snapping (hold Shift)")]
+        [Tooltip("Movement increment in inches. A quarter inch is half the VEX " +
+                 "hole pitch, so it lands both on holes and between them.")]
+        [SerializeField] private float moveSnapInches = 0.25f;
+
+        [Tooltip("Rotation increment in degrees, matching the ring ticks.")]
+        [SerializeField] private float rotationSnapDegrees = 15f;
 
         private IPointerInput pointer;
         private IActionInput actions;
@@ -60,7 +69,8 @@ namespace VexDesigner.Parts
         private Vector2 rotateScreenTangent;
 
         private float rotateAccumulated;
-        private LineRenderer rotationArc;
+        private MeshRenderer arcRenderer;
+        private Mesh arcMesh;
 
         /// <summary>
         /// Radial vector from the ring centre to the point that was grabbed.
@@ -68,6 +78,15 @@ namespace VexDesigner.Parts
         /// than from an arbitrary zero.
         /// </summary>
         private Vector3 rotateStartRadial;
+
+        /// <summary>
+        /// Each rotation ring with its own material, so their draw order can be
+        /// set individually. They all share a centre, so Unity's usual
+        /// distance sort cannot separate them - which is why the far ring
+        /// sometimes drew over the near one.
+        /// </summary>
+        private readonly List<(Vector3 axis, Material material)> ringMaterials =
+            new List<(Vector3, Material)>();
 
         private bool relativeAxes;
 
@@ -81,7 +100,7 @@ namespace VexDesigner.Parts
         /// the part rather than aiming at anything.
         /// </summary>
         public bool IsRotating =>
-            dragging != null && dragging.HandleKind == TransformHandle.Kind.Rotate;
+            dragging != null && dragging.HandleKind != TransformHandle.Kind.Move;
 
         public bool RelativeAxes => relativeAxes;
 
@@ -259,9 +278,16 @@ namespace VexDesigner.Parts
 
             // R swaps arrows for rings, held rather than toggled: rotation is
             // usually wanted for one adjustment, not a whole session.
-            bool rotating = actions.RotateModifierHeld;
+            //
+            // Latched while a ring is actually being turned. Letting go of R
+            // mid-drag would otherwise swap the handles out from under the
+            // gesture and hand the view back to the camera halfway through a
+            // rotation.
+            bool rotating = actions.RotateModifierHeld || IsRotating;
             moveHandles.gameObject.SetActive(!rotating);
             rotateHandles.gameObject.SetActive(rotating);
+
+            SortRotationRings();
 
             Vector3 centre = selection.GetCentre();
             gizmoRoot.transform.position = centre;
@@ -401,6 +427,11 @@ namespace VexDesigner.Parts
                 float delta = (offset - lastAxisOffset) * PrecisionFactor;
                 lastAxisOffset = offset;
 
+                if (actions.SnapHeld)
+                {
+                    delta = SnappedAxisDelta(delta);
+                }
+
                 selection.Translate(dragAxis * delta);
 
                 // Trail back to where it started, labelled with how far it has
@@ -420,7 +451,28 @@ namespace VexDesigner.Parts
                 float along = Vector2.Dot(pointer.DragDelta, rotateScreenTangent);
                 float angle = along * 0.35f * PrecisionFactor;
 
-                rotateAccumulated += angle;
+                if (actions.SnapHeld)
+                {
+                    // Snap the running total, then apply only the difference.
+                    // Snapping each frame's increment instead would quantise a
+                    // slow drag to zero and never move at all.
+                    float before = Mathf.Round(rotateAccumulated / rotationSnapDegrees);
+                    rotateAccumulated += angle;
+                    float after = Mathf.Round(rotateAccumulated / rotationSnapDegrees);
+
+                    angle = (after - before) * rotationSnapDegrees;
+                }
+                else
+                {
+                    rotateAccumulated += angle;
+                }
+
+                if (Mathf.Approximately(angle, 0f))
+                {
+                    DrawRotationArc();
+                    return;
+                }
+
                 selection.Rotate(Quaternion.AngleAxis(angle, dragAxis), dragOrigin);
 
                 DrawRotationArc();
@@ -464,38 +516,31 @@ namespace VexDesigner.Parts
         /// </summary>
         private void DrawRotationArc()
         {
-            if (rotationArc == null || dragging == null || rotateStartRadial == Vector3.zero)
+            if (arcRenderer == null || dragging == null || rotateStartRadial == Vector3.zero)
             {
                 return;
             }
 
-            float radius = gizmoRoot.transform.localScale.x * 0.75f;
+            float scale = gizmoRoot.transform.localScale.x;
+            float radius = scale * 0.75f;
 
             // Wrap at a full turn rather than clamping. Past 360 degrees a
             // filled ring says nothing more, so it empties and begins again -
             // which also reads as "you have gone all the way round".
             float sweep = rotateAccumulated % 360f;
 
-            // Two degrees per segment keeps the curve smooth; a small turn
-            // still gets a handful of segments rather than one flat chord.
-            int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(sweep) / 2f), 2, 180);
-
-            // Grows from the point that was grabbed, so the arc appears under
-            // the cursor rather than starting somewhere unrelated.
-            Vector3 start = rotateStartRadial * radius;
-
-            rotationArc.positionCount = segments + 1;
-            for (int i = 0; i <= segments; i++)
+            if (Mathf.Abs(sweep) < 1f)
             {
-                float t = i / (float)segments;
-                Quaternion turn = Quaternion.AngleAxis(sweep * t, dragAxis);
-                rotationArc.SetPosition(i, dragOrigin + (turn * start));
+                arcRenderer.enabled = false;
+                return;
             }
 
-            // Track the gizmo's screen-constant size, or the arc is a hairline
-            // when close in and a slab when far away.
-            rotationArc.widthMultiplier = gizmoRoot.transform.localScale.x * 0.07f;
-            rotationArc.enabled = Mathf.Abs(sweep) > 1f;
+            // Slightly fatter than the ring it sits on, so it reads as a
+            // highlight rather than as part of the ring.
+            BuildArcMesh(dragOrigin, dragAxis, rotateStartRadial,
+                radius, scale * 0.035f, sweep);
+
+            arcRenderer.enabled = true;
         }
 
         private void EndDrag()
@@ -510,15 +555,46 @@ namespace VexDesigner.Parts
             rotateAccumulated = 0f;
 
             MeasurementDisplay.Hide();
-            if (rotationArc != null)
+            if (arcRenderer != null)
             {
-                rotationArc.enabled = false;
+                arcRenderer.enabled = false;
             }
 
             interactionLock.CameraOrbitLocked = false;
         }
 
         private float PrecisionFactor => actions.PrecisionHeld ? 0.2f : 1f;
+
+        /// <summary>
+        /// Snaps movement to the global grid, but only along the axis being
+        /// dragged.
+        ///
+        /// This is the distinction that matters. Snapping the whole position
+        /// would jump the part on all three axes the instant snapping is
+        /// switched on - the Protobot behaviour where a part at
+        /// (0, 0, 0.15") suddenly moves on axes nobody touched. Here only the
+        /// dragged component is quantised: that part moves to (0, 0, 0.25")
+        /// and its other two coordinates are left exactly as they were.
+        ///
+        /// The grid is still global rather than relative to where the drag
+        /// started, so parts snapped independently line up with each other.
+        /// </summary>
+        private float SnappedAxisDelta(float rawDelta)
+        {
+            float step = moveSnapInches * 0.0254f;
+            if (step <= 0f)
+            {
+                return rawDelta;
+            }
+
+            Vector3 centre = selection.GetCentre();
+
+            float current = Vector3.Dot(centre, dragAxis);
+            float target = current + rawDelta;
+
+            float snapped = Mathf.Round(target / step) * step;
+            return snapped - current;
+        }
 
         /// <summary>
         /// Distance along a line to the point nearest the aim ray: the standard
@@ -661,8 +737,16 @@ namespace VexDesigner.Parts
             root.transform.rotation = Quaternion.FromToRotation(Vector3.up, axis);
 
             const float radius = 0.75f;
+
+            // Its own material, so this ring's draw order can be set apart
+            // from the other two. See SortRotationRings.
+            var ringMaterial = new Material(handleMaterial) { name = $"Ring_{axis}" };
+            ringMaterials.Add((axis, ringMaterial));
+
             AddPiece(root.transform, GizmoMeshes.Torus(),
-                Vector3.zero, Vector3.one * radius, colour);
+                Vector3.zero, Vector3.one * radius, colour, ringMaterial);
+
+            AddTickMarks(root.transform, radius, colour, ringMaterial);
 
             // Boxes around the ring, not a convex mesh collider.
             //
@@ -741,23 +825,180 @@ namespace VexDesigner.Parts
         private void BuildRotationArc()
         {
             var go = new GameObject("RotationArc");
-            rotationArc = go.AddComponent<LineRenderer>();
 
-            rotationArc.useWorldSpace = true;
-            rotationArc.widthMultiplier = 0.004f;
-            rotationArc.numCapVertices = 2;
-            rotationArc.material = handleMaterial;
-            rotationArc.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            rotationArc.receiveShadows = false;
-            rotationArc.enabled = false;
+            // A generated tube rather than a LineRenderer. A LineRenderer is a
+            // camera-facing ribbon, so the arc collapsed to a flat sliver as
+            // soon as the ring was viewed edge-on - exactly when it was needed
+            // to judge how far a rotation had gone.
+            arcMesh = new Mesh { name = "RotationArc" };
+            arcMesh.MarkDynamic();
 
-            var block = new MaterialPropertyBlock();
-            block.SetColor(Shader.PropertyToID("_BaseColor"), new Color(1f, 0.92f, 0.4f));
-            rotationArc.SetPropertyBlock(block);
+            go.AddComponent<MeshFilter>().sharedMesh = arcMesh;
+
+            arcRenderer = go.AddComponent<MeshRenderer>();
+            arcRenderer.sharedMaterial = new Material(handleMaterial) { name = "ArcSweep" };
+            arcRenderer.sharedMaterial.SetColor(
+                Shader.PropertyToID("_BaseColor"), new Color(1f, 0.86f, 0.25f));
+
+            // Above every ring, so the sweep is never hidden by the ring it is
+            // drawn on.
+            arcRenderer.sharedMaterial.renderQueue = 4010;
+            arcRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            arcRenderer.receiveShadows = false;
+            arcRenderer.enabled = false;
+        }
+
+        /// <summary>
+        /// Builds a torus segment sweeping <paramref name="sweepDegrees"/> from
+        /// <paramref name="startRadial"/>, in world space.
+        /// </summary>
+        private void BuildArcMesh(
+            Vector3 centre, Vector3 axis, Vector3 startRadial,
+            float radius, float tubeRadius, float sweepDegrees)
+        {
+            int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(sweepDegrees) / 3f), 2, 160);
+            const int sides = 6;
+
+            var vertices = new Vector3[(segments + 1) * sides];
+            var triangles = new int[segments * sides * 6];
+
+            Vector3 radialDir = startRadial.normalized;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float t = i / (float)segments;
+                Quaternion turn = Quaternion.AngleAxis(sweepDegrees * t, axis);
+
+                Vector3 outward = turn * radialDir;
+                Vector3 ringCentre = centre + (outward * radius);
+
+                for (int j = 0; j < sides; j++)
+                {
+                    float phi = (j / (float)sides) * Mathf.PI * 2f;
+                    Vector3 offset =
+                        (outward * (Mathf.Cos(phi) * tubeRadius)) +
+                        (axis * (Mathf.Sin(phi) * tubeRadius));
+
+                    vertices[(i * sides) + j] = ringCentre + offset;
+                }
+            }
+
+            int index = 0;
+            for (int i = 0; i < segments; i++)
+            {
+                for (int j = 0; j < sides; j++)
+                {
+                    int next = (j + 1) % sides;
+                    int a = (i * sides) + j;
+                    int b = (i * sides) + next;
+                    int c = ((i + 1) * sides) + j;
+                    int d = ((i + 1) * sides) + next;
+
+                    triangles[index++] = a;
+                    triangles[index++] = c;
+                    triangles[index++] = b;
+                    triangles[index++] = b;
+                    triangles[index++] = c;
+                    triangles[index++] = d;
+                }
+            }
+
+            arcMesh.Clear();
+            arcMesh.vertices = vertices;
+            arcMesh.triangles = triangles;
+            arcMesh.RecalculateNormals();
+            arcMesh.RecalculateBounds();
+        }
+
+        /// <summary>
+        /// Puts the rings in draw order, nearest last.
+        ///
+        /// All three share a centre, so Unity's per-object distance sort sees
+        /// them as equidistant and picks an arbitrary order - which is why the
+        /// far ring sometimes covered the near one. Sorting by each ring's
+        /// closest point instead, and driving the render queue from that, makes
+        /// the ordering match what the user sees.
+        /// </summary>
+        private void SortRotationRings()
+        {
+            Camera cam = Camera.main;
+            if (cam == null || ringMaterials.Count == 0)
+            {
+                return;
+            }
+
+            Vector3 centre = gizmoRoot.transform.position;
+            float radius = gizmoRoot.transform.localScale.x * 0.75f;
+            Vector3 eye = cam.transform.position;
+
+            // Rank by how close each ring gets to the eye. For a ring, that is
+            // the point in its plane directly toward the camera.
+            var ranked = new List<(float distance, Material material)>(ringMaterials.Count);
+
+            foreach ((Vector3 axis, Material material) in ringMaterials)
+            {
+                Vector3 worldAxis = gizmoRoot.transform.TransformDirection(axis).normalized;
+                Vector3 toEye = Vector3.ProjectOnPlane(eye - centre, worldAxis);
+
+                Vector3 closest = toEye.sqrMagnitude > 1e-8f
+                    ? centre + (toEye.normalized * radius)
+                    : centre;
+
+                ranked.Add((Vector3.Distance(eye, closest), material));
+            }
+
+            // Farthest first, so the nearest is drawn last and ends up on top.
+            ranked.Sort((a, b) => b.distance.CompareTo(a.distance));
+
+            for (int i = 0; i < ranked.Count; i++)
+            {
+                ranked[i].material.renderQueue = 4000 + i;
+            }
+        }
+
+        /// <summary>
+        /// Ticks every 15 degrees around a ring, so a rotation can be judged
+        /// against fixed marks rather than by eye - and so the snapping
+        /// increment is visible before it is used.
+        /// </summary>
+        private void AddTickMarks(Transform parent, float radius, Color colour, Material material)
+        {
+            const int ticks = 24;   // 360 / 15
+
+            for (int i = 0; i < ticks; i++)
+            {
+                float angle = (i / (float)ticks) * Mathf.PI * 2f;
+                var tick = new GameObject($"Tick_{i * 15}");
+                tick.transform.SetParent(parent, false);
+                tick.transform.localPosition =
+                    new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+                tick.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+
+                tick.AddComponent<MeshFilter>().sharedMesh = GizmoMeshes.Shaft();
+
+                var renderer = tick.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+
+                // Every fourth tick - the 90 degree marks - is longer, so the
+                // quadrants can be found at a glance.
+                bool major = i % 6 == 0;
+                float length = major ? 0.10f : 0.055f;
+
+                tick.transform.localScale = new Vector3(0.022f, length, 0.022f);
+                tick.transform.localPosition -= tick.transform.up * (length * 0.5f);
+
+                var block = new MaterialPropertyBlock();
+                block.SetColor(Shader.PropertyToID("_BaseColor"),
+                    major ? Color.Lerp(colour, Color.white, 0.45f) : colour);
+                renderer.SetPropertyBlock(block);
+            }
         }
 
         private void AddPiece(
-            Transform parent, Mesh mesh, Vector3 localPosition, Vector3 scale, Color colour)
+            Transform parent, Mesh mesh, Vector3 localPosition, Vector3 scale, Color colour,
+            Material material = null)
         {
             var go = new GameObject("Piece");
             go.transform.SetParent(parent, false);
@@ -767,7 +1008,7 @@ namespace VexDesigner.Parts
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
 
             var renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = handleMaterial;
+            renderer.sharedMaterial = material != null ? material : handleMaterial;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 

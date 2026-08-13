@@ -77,7 +77,12 @@ namespace VexDesigner.Parts
 
         public bool Interactable
         {
-            get => interactable && (active == null || active == this);
+            // Not interactable while the bar is draining. The cursor drops back
+            // to a dot, which is the clearest possible statement that clicking
+            // now will do nothing - better than a hand that promises an action
+            // the button is deliberately refusing.
+            get => interactable && state != State.Waiting &&
+                   (active == null || active == this);
             set
             {
                 interactable = value;
@@ -240,6 +245,13 @@ namespace VexDesigner.Parts
         /// edge rather than fading, so remaining time is readable at a glance
         /// rather than having to be judged from a brightness.
         /// </summary>
+        /// <summary>
+        /// Shrinks the overlay disc from full-face to nothing.
+        ///
+        /// Radial rather than a sliding bar: the buttons are round, and a disc
+        /// closing to the centre reads as a countdown at a glance from any
+        /// angle, whereas a bar has a direction that only makes sense head-on.
+        /// </summary>
         private void UpdateGreyBar(float fill)
         {
             if (greyBar == null)
@@ -247,17 +259,13 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            greyBar.gameObject.SetActive(fill > 0.001f);
+            float clamped = Mathf.Clamp01(fill);
+            greyBar.gameObject.SetActive(clamped > 0.001f);
 
+            // Thickness (local Y for a cylinder) is left alone; only the radius
+            // shrinks.
             Vector3 scale = greyBar.localScale;
-            scale.x = Mathf.Clamp01(fill);
-            greyBar.localScale = scale;
-
-            // Quad pivots are central, so shrinking alone would close in from
-            // both sides. Offsetting by half the lost width pins the left edge.
-            Vector3 position = greyBar.localPosition;
-            position.x = -(1f - Mathf.Clamp01(fill)) * 0.5f;
-            greyBar.localPosition = position;
+            greyBar.localScale = new Vector3(clamped, scale.y, clamped);
         }
 
         private void RefreshPreview()
@@ -283,16 +291,21 @@ namespace VexDesigner.Parts
                     continue;
                 }
 
-                // Pinned parts are exempt from both buttons. Freezing is an
-                // explicit statement that a part is where it is wanted.
-                if (part.IsFrozen)
+                if (target == Target.AllParts)
                 {
+                    // Delete-all means all, pinned included. A "clear
+                    // everything" button that quietly left some parts behind
+                    // would be worse than no button - the user would think it
+                    // had failed rather than that it had a rule.
+                    found.Add(part);
                     continue;
                 }
 
-                if (target == Target.AllParts)
+                // The floor sweep does spare pinned parts: freezing one in
+                // mid-air is an explicit statement that it is where it is
+                // wanted, and a tidy-up should not undo that.
+                if (part.IsFrozen)
                 {
-                    found.Add(part);
                     continue;
                 }
 

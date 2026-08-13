@@ -24,6 +24,10 @@ namespace VexDesigner.UI
                  "back into view, as a fraction of the viewport.")]
         [SerializeField] private float viewportMargin = 0.08f;
 
+        [Tooltip("How far the label sits off the trail, in world units. Enough " +
+                 "that the line does not strike through the digits.")]
+        [SerializeField] private float lineOffset = 0.035f;
+
         private static MeasurementDisplay instance;
 
         private void Awake()
@@ -76,16 +80,15 @@ namespace VexDesigner.UI
             label.text = FormatImperial(inches, fractionDenominator);
 
             Vector3 anchor = ChooseLabelPoint(from, to);
-            label.transform.position = anchor;
-
-            // Always face the viewer, so the measurement is readable from
-            // wherever the drag is being watched from.
             Camera cam = Camera.main;
-            if (cam != null)
+
+            if (cam == null)
             {
-                label.transform.rotation = Quaternion.LookRotation(
-                    label.transform.position - cam.transform.position, Vector3.up);
+                label.transform.position = anchor;
+                return;
             }
+
+            OrientAlongLine(anchor, (to - from), cam);
         }
 
         /// <summary>
@@ -96,6 +99,45 @@ namespace VexDesigner.UI
         /// so a long drag that runs out of frame still reports its length
         /// rather than taking the number away with it.
         /// </summary>
+        /// <summary>
+        /// Lays the text along the trail and lifts it clear of the line.
+        ///
+        /// Running the text along the line rather than always horizontal means
+        /// a vertical move is labelled with vertical text, which reads as
+        /// belonging to that measurement rather than floating near it. The
+        /// offset keeps the number off the line itself, which would otherwise
+        /// strike through the digits.
+        /// </summary>
+        private void OrientAlongLine(Vector3 anchor, Vector3 lineDirection, Camera cam)
+        {
+            Vector3 toCamera = (anchor - cam.transform.position).normalized;
+
+            // The text plane faces the camera; within that plane, the reading
+            // direction follows the line.
+            Vector3 along = Vector3.ProjectOnPlane(lineDirection, toCamera);
+
+            if (along.sqrMagnitude < 1e-8f)
+            {
+                // Line points straight at the viewer, so it has no direction on
+                // screen. Fall back to horizontal.
+                along = Vector3.ProjectOnPlane(cam.transform.right, toCamera);
+            }
+
+            along.Normalize();
+
+            // Keep text left-to-right on screen. Without this a drag in the
+            // opposite direction renders the label upside down.
+            if (Vector3.Dot(along, cam.transform.right) < 0f)
+            {
+                along = -along;
+            }
+
+            Vector3 up = Vector3.Cross(toCamera, along).normalized;
+
+            label.transform.rotation = Quaternion.LookRotation(toCamera, up);
+            label.transform.position = anchor + (up * lineOffset);
+        }
+
         private Vector3 ChooseLabelPoint(Vector3 from, Vector3 to)
         {
             Camera cam = Camera.main;

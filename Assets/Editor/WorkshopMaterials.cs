@@ -180,6 +180,42 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
+        /// Semi-transparent dark disc used for the button countdown.
+        ///
+        /// Transparent so the label stays readable underneath it - an opaque
+        /// overlay hid the very question it was counting down for.
+        /// </summary>
+        public static Material CreateTransparentFill()
+        {
+            Material mat = CreateOrLoad("ButtonFill");
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader != null)
+            {
+                mat.shader = shader;
+            }
+
+            // URP switches blending through these together; setting the colour
+            // alpha alone leaves the material opaque.
+            mat.SetFloat("_Surface", 1f);                        // transparent
+            mat.SetFloat("_Blend", 0f);                          // alpha
+            mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_ZWrite", 0f);
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.DisableKeyword("_ALPHATEST_ON");
+
+            if (mat.HasProperty("_BaseColor"))
+            {
+                mat.SetColor("_BaseColor", new Color(0.03f, 0.03f, 0.04f, 0.62f));
+            }
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        /// <summary>
         /// Emissive material for the fluorescent tubes. Separate because it is
         /// the one surface that should be bright regardless of lighting.
         /// </summary>

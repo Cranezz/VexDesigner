@@ -72,6 +72,9 @@ namespace VexDesigner.InputSources
         /// <summary>Jump.</summary>
         public bool JumpPressed { get; private set; }
 
+        /// <summary>Held to snap movement and rotation to fixed increments.</summary>
+        public bool SnapHeld { get; private set; }
+
         private VexDesigner.Parts.InteractionLock interactionLock;
 
         private void Awake()
@@ -132,6 +135,7 @@ namespace VexDesigner.InputSources
                 RotateModifierHeld = false;
                 PrecisionHeld = false;
                 JumpPressed = false;
+                SnapHeld = false;
                 return;
             }
 
@@ -142,6 +146,11 @@ namespace VexDesigner.InputSources
             RotateModifierHeld = keyboard.rKey.isPressed;
             PrecisionHeld = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
             JumpPressed = keyboard.spaceKey.wasPressedThisFrame;
+
+            // Shares Shift with sprinting. They never overlap in practice -
+            // nobody sprints while dragging a gizmo handle - and a single
+            // obvious modifier beats two arbitrary ones.
+            SnapHeld = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
         }
 
         private void ReadLook(Mouse mouse)

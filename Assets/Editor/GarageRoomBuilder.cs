@@ -261,45 +261,39 @@ namespace VexDesigner.EditorTools
             ConfirmButton.Target target,
             string idleLabel, string confirmLabel, Color faceColour)
         {
-            // Large enough that the idle label reads across the room. The
-            // confirmation question is longer and auto-sizes down, so the
-            // button is sized for the text that has to be readable at a
-            // distance rather than for the longest string it ever shows.
-            const float widthIn = 40f;
-            const float heightIn = 18f;
+            // Round, like a real workshop stop button. Diameter is set by the
+            // longest label that has to read across the room; the confirmation
+            // question is longer still and auto-sizes down.
+            const float diameterIn = 26f;
 
             var mount = new GameObject($"Button_{target}");
             mount.transform.SetParent(parent.transform, false);
 
             Vector3 centre = new Vector3(In(positionIn.x), In(positionIn.y), In(positionIn.z));
 
-            // Thickness runs along the wall normal; width and height across it.
-            Vector3 across = Vector3.Cross(Vector3.up, outward).normalized;
-            Vector3 size = (across * In(widthIn)) + (Vector3.up * In(heightIn));
-            Vector3 plateSize = (across * In(widthIn + 2.5f)) + (Vector3.up * In(heightIn + 2.5f));
+            // Unity's cylinder runs along its local Y and is two units tall, so
+            // aligning Y with the wall normal points the flat faces into the
+            // room, and thickness scales are halved.
+            Quaternion facing = Quaternion.FromToRotation(Vector3.up, outward);
+            float radius = In(diameterIn) * 0.5f;
 
-            GameObject plate = BoxWorld(mount, "Plate",
-                centre, Abs(plateSize) + (Abs(outward) * In(1.2f)),
-                WorkshopMaterials.Steel, widthIn, heightIn);
+            GameObject plate = Cylinder(mount, "Plate", centre, facing,
+                radius + In(1.6f), In(0.6f), WorkshopMaterials.Steel.Material);
 
             // Frame is decoration; leaving its collider live would let the user
             // aim at the surround and wonder why nothing happened.
             plate.GetComponent<Collider>().enabled = false;
 
-            GameObject face = BoxWorld(mount, "Button",
-                centre + (outward * In(1.3f)),
-                Abs(size) + (Abs(outward) * In(2.2f)),
-                WorkshopMaterials.Steel, widthIn, heightIn);
+            GameObject face = Cylinder(mount, "Button", centre + (outward * In(1.1f)),
+                facing, radius, In(1.1f),
+                WorkshopMaterials.CreateButtonFace(target.ToString(), faceColour));
 
             face.isStatic = false;
-            face.GetComponent<MeshRenderer>().sharedMaterial =
-                WorkshopMaterials.CreateButtonFace(target.ToString(), faceColour);
-
             face.AddComponent<Highlightable>();
             var button = face.AddComponent<ConfirmButton>();
             button.Configure(target, idleLabel, confirmLabel);
 
-            Vector3 frontOfFace = centre + (outward * In(2.6f));
+            Vector3 frontOfFace = centre + (outward * In(2.4f));
 
             // TextMeshPro reads correctly when its forward points the same way
             // the reader is looking - that is, *into* the wall. Facing it out
@@ -307,24 +301,26 @@ namespace VexDesigner.EditorTools
             // first version come out mirrored.
             Quaternion readable = Quaternion.LookRotation(-outward, Vector3.up);
 
-            // The grey bar sits in its own anchor scaled to the face, so it can
-            // be driven in 0..1 without knowing the button's real size.
-            var barAnchor = new GameObject("BarAnchor");
+            // The countdown disc, in its own anchor scaled to the button so it
+            // can be driven in 0..1 without knowing the real diameter.
+            //
+            // Behind the label and very thin. The first version was a
+            // centimetre thick and sat proud of the face, so it swept across
+            // the text and hid the question it was counting down for.
+            var barAnchor = new GameObject("FillAnchor");
             barAnchor.transform.SetParent(mount.transform, false);
-            barAnchor.transform.position = frontOfFace - (outward * In(0.1f));
-            barAnchor.transform.rotation = readable;
-            barAnchor.transform.localScale = new Vector3(In(widthIn), In(heightIn), 1f);
+            barAnchor.transform.position = frontOfFace - (outward * In(0.35f));
+            barAnchor.transform.rotation = facing;
+            barAnchor.transform.localScale = new Vector3(radius * 2f, In(0.06f), radius * 2f);
 
-            // A thin box rather than a quad: a quad is single-sided and would
-            // vanish depending on which way it ended up facing.
-            var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var bar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             bar.name = "GreyBar";
             bar.transform.SetParent(barAnchor.transform, false);
             bar.transform.localPosition = Vector3.zero;
-            bar.transform.localScale = new Vector3(1f, 1f, 0.02f);
+            bar.transform.localScale = Vector3.one;
             Object.DestroyImmediate(bar.GetComponent<Collider>());
             bar.GetComponent<MeshRenderer>().sharedMaterial =
-                WorkshopMaterials.CreateButtonFace("Grey", new Color(0.10f, 0.10f, 0.11f));
+                WorkshopMaterials.CreateTransparentFill();
 
             // The label is NOT parented to the scaled anchor. A non-uniform
             // parent scale stretches glyphs, which is why the first version was
@@ -351,18 +347,37 @@ namespace VexDesigner.EditorTools
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
             {
-                // Only a small margin. A generous one looks tidy in isolation
-                // but forces the auto-sizer to shrink the text, which is the
-                // opposite of what a wall button needs.
-                rect.sizeDelta = new Vector2(In(widthIn - 1.5f), In(heightIn - 1.5f));
+                // Inscribed square inside the circle, less a small margin.
+                // Anything larger would spill past the button's edge.
+                float inscribed = radius * 1.38f;
+                rect.sizeDelta = new Vector2(inscribed, inscribed);
             }
 
             button.Bind(text, bar.transform);
         }
 
-        private static Vector3 Abs(Vector3 v)
+        /// <summary>
+        /// Disc facing along <paramref name="facing"/>'s up axis. Unity's
+        /// cylinder is two units tall, so the thickness scale is halved.
+        /// </summary>
+        private static GameObject Cylinder(
+            GameObject parent, string name, Vector3 centre, Quaternion facing,
+            float radius, float thickness, Material material)
         {
-            return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = name;
+            go.transform.SetParent(parent.transform, false);
+            go.transform.position = centre;
+            go.transform.rotation = facing;
+            go.transform.localScale = new Vector3(radius * 2f, thickness * 0.5f, radius * 2f);
+            go.isStatic = true;
+
+            if (material != null)
+            {
+                go.GetComponent<MeshRenderer>().sharedMaterial = material;
+            }
+
+            return go;
         }
 
         /// <summary>Box placed by world position and world-axis size.</summary>

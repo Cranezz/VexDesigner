@@ -28,7 +28,7 @@ namespace VexDesigner.Parts
         [SerializeField] private float maxCarryDistance = 4f;
 
         [Tooltip("Fraction of the current distance moved per scroll notch.")]
-        [SerializeField] private float carryZoomFraction = 0.14f;
+        [SerializeField] private float carryZoomFraction = 0.05f;
 
         [Tooltip("Multiplier applied to rotation and distance while the " +
                  "precision modifier is held.")]
@@ -265,12 +265,21 @@ namespace VexDesigner.Parts
                 return;
             }
 
+            // Pull the spawn point back toward the viewer by the part's own
+            // radius. Placing it exactly at the shelf copy's surface put it
+            // half inside the shelf, and depenetration promptly shoved it out
+            // through the bench - which is why new screws appeared under the
+            // table.
+            float clearance = 0.02f;
+            if (definition.mesh != null)
+            {
+                clearance += definition.mesh.bounds.extents.magnitude;
+            }
+
             float distance = hasLastHit
-                ? Mathf.Clamp(lastHitDistance, minCarryDistance, maxCarryDistance)
+                ? Mathf.Clamp(lastHitDistance - clearance, minCarryDistance, maxCarryDistance)
                 : 0.85f;
 
-            // Place it at the aim point first, then grab it by its centre, so
-            // it arrives exactly where the shelf copy was.
             Ray ray = pointer.AimRay;
             go.transform.position = ray.origin + (ray.direction * distance);
 

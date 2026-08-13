@@ -34,5 +34,10 @@ namespace VexDesigner.InputSources
 
         /// <summary>Jump.</summary>
         bool JumpPressed { get; }
+
+        /// <summary>
+        /// Held to snap movement and rotation to fixed increments.
+        /// </summary>
+        bool SnapHeld { get; }
     }
 }
