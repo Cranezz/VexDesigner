@@ -58,6 +58,7 @@ namespace VexDesigner.Player
         private CharacterController controller;
         private ILookInput input;
         private IActionInput actions;
+        private VexDesigner.Parts.InteractionLock interactionLock;
         private float pitch;
         private float verticalVelocity;
 
@@ -79,6 +80,7 @@ namespace VexDesigner.Player
             controller = GetComponent<CharacterController>();
             input = GetComponentInChildren<ILookInput>();
             actions = GetComponentInChildren<IActionInput>();
+            interactionLock = GetComponent<VexDesigner.Parts.InteractionLock>();
             currentEyeHeight = eyeHeightIn;
 
             if (input == null)
@@ -156,7 +158,8 @@ namespace VexDesigner.Player
 
         private void ApplyMovement()
         {
-            Vector2 move = MovementEnabled ? input.MoveDelta : Vector2.zero;
+            bool held = interactionLock != null && interactionLock.MovementLocked;
+            Vector2 move = (MovementEnabled && !held) ? input.MoveDelta : Vector2.zero;
 
             Vector3 horizontal =
                 (transform.right * move.x) + (transform.forward * move.y);

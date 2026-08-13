@@ -17,5 +17,16 @@ namespace VexDesigner.Parts
         /// True while something other than the camera owns the orbit gesture.
         /// </summary>
         public bool CameraOrbitLocked { get; set; }
+
+        /// <summary>
+        /// True while the player should stay put.
+        ///
+        /// Separate from the look lock because the two are wanted at different
+        /// times: carrying a part locks the view while rotating but must leave
+        /// walking free, whereas turning a gizmo ring should hold the player
+        /// still - walking away mid-rotation drags the whole reference frame
+        /// out from under the gesture.
+        /// </summary>
+        public bool MovementLocked { get; set; }
     }
 }

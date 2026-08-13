@@ -24,9 +24,14 @@ namespace VexDesigner.UI
                  "back into view, as a fraction of the viewport.")]
         [SerializeField] private float viewportMargin = 0.08f;
 
-        [Tooltip("How far the label sits off the trail, in world units. Enough " +
-                 "that the line does not strike through the digits.")]
-        [SerializeField] private float lineOffset = 0.035f;
+        [Tooltip("How far the label sits off the trail, relative to its own " +
+                 "size, so the gap stays proportional at any distance.")]
+        [SerializeField] private float lineOffset = 0.6f;
+
+        [Tooltip("Label height as a fraction of the distance to the camera. " +
+                 "Constant apparent size, so it reads the same close up and " +
+                 "across the garage.")]
+        [SerializeField] private float screenScale = 0.055f;
 
         private static MeasurementDisplay instance;
 
@@ -135,7 +140,16 @@ namespace VexDesigner.UI
             Vector3 up = Vector3.Cross(toCamera, along).normalized;
 
             label.transform.rotation = Quaternion.LookRotation(toCamera, up);
-            label.transform.position = anchor + (up * lineOffset);
+
+            // Scale with distance so the number is the same size on screen
+            // wherever the part is. A world-sized label is unreadable across
+            // the garage and overwhelming up close, and a measurement that
+            // cannot be read is not a measurement.
+            float distance = Vector3.Distance(cam.transform.position, anchor);
+            float scale = Mathf.Max(distance * screenScale, 0.02f);
+            label.transform.localScale = Vector3.one * scale;
+
+            label.transform.position = anchor + (up * (lineOffset * scale));
         }
 
         private Vector3 ChooseLabelPoint(Vector3 from, Vector3 to)
@@ -171,13 +185,15 @@ namespace VexDesigner.UI
                     viewport.x > viewportMargin && viewport.x < 1f - viewportMargin &&
                     viewport.y > viewportMargin && viewport.y < 1f - viewportMargin;
 
-                // Prefer points near the middle of the line, which reads as
-                // labelling the whole span, then near the centre of the screen.
-                float distanceFromMiddleOfLine = Mathf.Abs(t - 0.5f);
+                // Prefer whatever is nearest the viewer, then near the centre
+                // of the screen. Nearness dominates because a label further
+                // down a long trail is smaller, further from where the user is
+                // looking, and more likely to be occluded.
+                float distanceFromCamera = viewport.z;
                 float distanceFromScreenCentre =
                     Vector2.Distance(new Vector2(viewport.x, viewport.y), new Vector2(0.5f, 0.5f));
 
-                float score = distanceFromMiddleOfLine + (distanceFromScreenCentre * 0.5f);
+                float score = distanceFromCamera + (distanceFromScreenCentre * 0.35f);
 
                 // Any visible point beats any off-screen one, whatever the
                 // scores; the label being readable matters more than where

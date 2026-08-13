@@ -251,11 +251,32 @@ namespace VexDesigner.Parts
         /// whatever was clicked. Spawning at a fixed distance instead made a
         /// part taken from the shelf appear far away and inside the bench.
         /// </summary>
-        public void BeginCarryNew(PartDefinition definition)
+        /// <summary>
+        /// Creates a fresh part and puts it in hand.
+        ///
+        /// <paramref name="keepDistance"/> holds the part at the distance the
+        /// last one was at. Used when placing repeatedly with Alt: without it
+        /// every duplicate snapped back to wherever the shelf copy had been,
+        /// undoing the reach the user had just set.
+        /// </summary>
+        public void BeginCarryNew(PartDefinition definition, float keepDistance = -1f)
         {
             if (definition == null)
             {
                 Debug.LogWarning("[Parts] Tried to take a part with no definition.");
+                return;
+            }
+
+            if (keepDistance > 0f)
+            {
+                GameObject repeat = PartFactory.Create(definition, withPhysics: false);
+                if (repeat != null)
+                {
+                    Ray aim = pointer.AimRay;
+                    repeat.transform.position = aim.origin + (aim.direction * keepDistance);
+                    AttachToHand(repeat, definition, keepDistance, repeat.transform.position);
+                }
+
                 return;
             }
 
@@ -718,6 +739,7 @@ namespace VexDesigner.Parts
             GameObject placed = carried;
             PartDefinition definition = carriedDefinition;
             PartGroup group = carriedInstance?.Group;
+            float heldAt = carryDistance;
 
             group?.SetGrabbed(false);
             group?.WakeNeighbours();
@@ -742,7 +764,7 @@ namespace VexDesigner.Parts
             // identical parts does not mean a return trip to the shelf.
             if (!frozen && pointer.RepeatModifierHeld && definition != null)
             {
-                BeginCarryNew(definition);
+                BeginCarryNew(definition, heldAt);
             }
             else
             {

@@ -230,19 +230,23 @@ namespace VexDesigner.EditorTools
         {
             // Left-hand wall, clear of the benches. Facing into the room, so
             // the outward normal is +X.
+            //
+            // Side by side along the wall rather than stacked. The first
+            // version placed them 18 in apart with a 26 in diameter, so they
+            // overlapped - a button cannot be half inside another one.
             float x = -(RoomWidthIn * 0.5f) + 3.2f;
-            const float z = 46f;
+            const float y = 50f;
             var outward = Vector3.right;
 
-            BuildConfirmButton(parent, new Vector3(x, 58f, z), outward,
+            BuildConfirmButton(parent, new Vector3(x, y, 34f), outward,
                 ConfirmButton.Target.FloorParts,
                 "CLEAR FLOOR",
                 "Delete parts on the floor?",
                 new Color(0.85f, 0.62f, 0.15f));
 
-            // Red, larger consequence, placed lower so it is not the one
-            // reached for by habit.
-            BuildConfirmButton(parent, new Vector3(x, 40f, z), outward,
+            // Red, and the further of the two, so it is not the one reached
+            // for by habit.
+            BuildConfirmButton(parent, new Vector3(x, y, 52f), outward,
                 ConfirmButton.Target.AllParts,
                 "DELETE ALL",
                 "Delete EVERY part?",
@@ -264,7 +268,7 @@ namespace VexDesigner.EditorTools
             // Round, like a real workshop stop button. Diameter is set by the
             // longest label that has to read across the room; the confirmation
             // question is longer still and auto-sizes down.
-            const float diameterIn = 26f;
+            const float diameterIn = 13f;
 
             var mount = new GameObject($"Button_{target}");
             mount.transform.SetParent(parent.transform, false);

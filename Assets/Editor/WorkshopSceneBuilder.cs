@@ -439,7 +439,7 @@ namespace VexDesigner.EditorTools
             // over every surface in the workshop without a background panel.
             text.fontMaterial.EnableKeyword("OUTLINE_ON");
             text.outlineColor = new Color32(255, 255, 255, 255);
-            text.outlineWidth = 0.28f;
+            text.outlineWidth = 0.14f;
 
             // Drawn over geometry, like the trail. A measurement hidden behind
             // the bench is missing at precisely the moment it is being read.

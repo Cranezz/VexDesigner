@@ -28,9 +28,9 @@ namespace VexDesigner.Parts
         [SerializeField] private float aimDistance = 12f;
 
         [Header("Snapping (hold Shift)")]
-        [Tooltip("Movement increment in inches. A quarter inch is half the VEX " +
-                 "hole pitch, so it lands both on holes and between them.")]
-        [SerializeField] private float moveSnapInches = 0.25f;
+        [Tooltip("Movement increment in inches. Half an inch is the VEX hole " +
+                 "pitch, so snapped parts land hole-to-hole.")]
+        [SerializeField] private float moveSnapInches = 0.5f;
 
         [Tooltip("Rotation increment in degrees, matching the ring ticks.")]
         [SerializeField] private float rotationSnapDegrees = 15f;
@@ -59,6 +59,14 @@ namespace VexDesigner.Parts
 
         /// <summary>Where the assembly's centre was when the drag began.</summary>
         private Vector3 dragStartCentre;
+
+        /// <summary>
+        /// Unsnapped position along the drag axis. Snapping reads this rather
+        /// than the part's actual position, which after a snap is always
+        /// exactly on the grid and so can never accumulate enough movement to
+        /// reach the next point.
+        /// </summary>
+        private float snapVirtualOffset;
 
         /// <summary>
         /// Screen direction that means "turn this ring forwards", derived from
@@ -165,6 +173,10 @@ namespace VexDesigner.Parts
             // reads the mouse directly, and a view that swings away mid-turn
             // takes the part out of sight.
             interactionLock.CameraOrbitLocked = IsRotating;
+
+            // Walking away mid-rotation drags the whole reference frame out
+            // from under the gesture, so the player is held still too.
+            interactionLock.MovementLocked = IsRotating;
         }
 
         // ------------------------------------------------------------------
@@ -359,6 +371,7 @@ namespace VexDesigner.Parts
             if (handle.HandleKind == TransformHandle.Kind.Move)
             {
                 lastAxisOffset = ProjectOntoAxis(pointer.AimRay, dragOrigin, dragAxis);
+                snapVirtualOffset = Vector3.Dot(dragStartCentre, dragAxis);
             }
             else
             {
@@ -430,6 +443,13 @@ namespace VexDesigner.Parts
                 if (actions.SnapHeld)
                 {
                     delta = SnappedAxisDelta(delta);
+                }
+                else
+                {
+                    // Keep the snap accumulator in step with reality, so
+                    // turning snapping on mid-drag does not jump the part by
+                    // however far it moved while snapping was off.
+                    snapVirtualOffset = Vector3.Dot(selection.GetCentre(), dragAxis) + delta;
                 }
 
                 selection.Translate(dragAxis * delta);
@@ -535,10 +555,11 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            // Slightly fatter than the ring it sits on, so it reads as a
-            // highlight rather than as part of the ring.
+            // Only a little fatter than the ring, and sitting exactly on it, so
+            // it reads as that ring lighting up rather than as a second coil
+            // wrapped around the outside.
             BuildArcMesh(dragOrigin, dragAxis, rotateStartRadial,
-                radius, scale * 0.035f, sweep);
+                radius, scale * 0.020f, sweep);
 
             arcRenderer.enabled = true;
         }
@@ -553,6 +574,7 @@ namespace VexDesigner.Parts
 
             dragging = null;
             rotateAccumulated = 0f;
+            interactionLock.MovementLocked = false;
 
             MeasurementDisplay.Hide();
             if (arcRenderer != null)
@@ -587,12 +609,18 @@ namespace VexDesigner.Parts
                 return rawDelta;
             }
 
-            Vector3 centre = selection.GetCentre();
+            // Accumulate the *unsnapped* intent separately and snap that.
+            //
+            // Basing the snap on the part's current position could never move
+            // it: after the first snap the part sits exactly on a grid point,
+            // so "grid point plus this frame's small movement" always rounds
+            // straight back to the same point. The drag was being thrown away
+            // one frame at a time no matter how far the cursor travelled.
+            snapVirtualOffset += rawDelta;
 
-            float current = Vector3.Dot(centre, dragAxis);
-            float target = current + rawDelta;
+            float snapped = Mathf.Round(snapVirtualOffset / step) * step;
+            float current = Vector3.Dot(selection.GetCentre(), dragAxis);
 
-            float snapped = Mathf.Round(target / step) * step;
             return snapped - current;
         }
 
@@ -856,8 +884,11 @@ namespace VexDesigner.Parts
             Vector3 centre, Vector3 axis, Vector3 startRadial,
             float radius, float tubeRadius, float sweepDegrees)
         {
-            int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(sweepDegrees) / 3f), 2, 160);
-            const int sides = 6;
+            // Finer than before on both axes. Six sides and three-degree steps
+            // gave a visibly faceted, ribbed tube that looked like a spring
+            // rather than a smooth highlight.
+            int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(sweepDegrees) / 1.5f), 3, 260);
+            const int sides = 10;
 
             var vertices = new Vector3[(segments + 1) * sides];
             var triangles = new int[segments * sides * 6];
@@ -968,11 +999,27 @@ namespace VexDesigner.Parts
             for (int i = 0; i < ticks; i++)
             {
                 float angle = (i / (float)ticks) * Mathf.PI * 2f;
+                Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+
+                bool major = i % 6 == 0;
+                float length = major ? 0.075f : 0.045f;
+
                 var tick = new GameObject($"Tick_{i * 15}");
                 tick.transform.SetParent(parent, false);
-                tick.transform.localPosition =
-                    new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                tick.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+
+                // Ticks point *inward along the radius*, not upward.
+                //
+                // The first version rotated about Y only, which left every tick
+                // pointing along the ring's own axis - so they stuck out
+                // sideways and looked scattered rather than reading as marks on
+                // a dial.
+                tick.transform.localRotation =
+                    Quaternion.FromToRotation(Vector3.up, -outward);
+
+                // The shaft mesh runs 0..1 from its origin, so placing the
+                // origin on the ring grows the tick inward from there.
+                tick.transform.localPosition = outward * radius;
+                tick.transform.localScale = new Vector3(0.014f, length, 0.014f);
 
                 tick.AddComponent<MeshFilter>().sharedMesh = GizmoMeshes.Shaft();
 
@@ -981,17 +1028,11 @@ namespace VexDesigner.Parts
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
 
-                // Every fourth tick - the 90 degree marks - is longer, so the
-                // quadrants can be found at a glance.
-                bool major = i % 6 == 0;
-                float length = major ? 0.10f : 0.055f;
-
-                tick.transform.localScale = new Vector3(0.022f, length, 0.022f);
-                tick.transform.localPosition -= tick.transform.up * (length * 0.5f);
-
+                // Black, so they read as graduations on the ring rather than as
+                // more of the ring. Quadrant marks are longer, not lighter.
                 var block = new MaterialPropertyBlock();
                 block.SetColor(Shader.PropertyToID("_BaseColor"),
-                    major ? Color.Lerp(colour, Color.white, 0.45f) : colour);
+                    new Color(0.04f, 0.04f, 0.05f));
                 renderer.SetPropertyBlock(block);
             }
         }
