@@ -428,7 +428,15 @@ namespace VexDesigner.EditorTools
 
             var text = labelGo.AddComponent<TMPro.TextMeshPro>();
             text.text = "0\"";
-            text.fontSize = 0.11f;
+
+            // World-space TMP sizes in world units. The shelf's page label sits
+            // at 0.32 and reads about an inch tall, so this is roughly two and
+            // a half inches at the reference distance - which is what a floating
+            // measurement needs to be legible while a part is being dragged.
+            //
+            // The previous 0.11 worked out at about a third of an inch, which
+            // is why it read as microscopic.
+            text.fontSize = 0.8f;
             text.alignment = TMPro.TextAlignmentOptions.Center;
             text.color = Color.black;
             text.fontStyle = TMPro.FontStyles.Bold;
@@ -452,7 +460,10 @@ namespace VexDesigner.EditorTools
             var rect = labelGo.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(0.6f, 0.15f);
+                // Generous, so a long reading like 11' 2 1/2" never wraps or
+                // clips. An over-large rect costs nothing; a tight one silently
+                // truncates the number.
+                rect.sizeDelta = new Vector2(1.6f, 0.3f);
             }
 
             var display = root.AddComponent<MeasurementDisplay>();
