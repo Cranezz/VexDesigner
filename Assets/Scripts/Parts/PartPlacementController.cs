@@ -76,6 +76,29 @@ namespace VexDesigner.Parts
 
         private IWorkshopInteractable hovered;
 
+        // --- Hole aiming ----------------------------------------------------
+
+        private HoleHighlighter aimMarker;
+        private HoleHit aimedHole;
+        private Highlightable dimmed;
+
+        [Header("Holes")]
+        [Tooltip("Colour of the hole being aimed at, on the side facing you.")]
+        [SerializeField] private Color nearHoleColour = new Color(0.25f, 0.85f, 1f);
+
+        [Tooltip("Colour used when the far side of the hole is targeted, so it " +
+                 "is obvious the selection is through the material.")]
+        [SerializeField] private Color farHoleColour = new Color(1f, 0.65f, 0.15f);
+
+        [Tooltip("How far the part's own glow drops while one of its holes is " +
+                 "targeted. Low enough that the hole clearly wins.")]
+        [SerializeField, Range(0f, 1f)] private float partDimWhileAiming = 0.18f;
+
+        /// <summary>The hole currently under the crosshair, if any.</summary>
+        public HoleHit AimedHole => aimedHole;
+
+        public bool HasHoleTarget => aimedHole.IsValid;
+
         private GameObject carried;
         private PartDefinition carriedDefinition;
         private Collider carriedCollider;
@@ -190,11 +213,13 @@ namespace VexDesigner.Parts
                     hovered = null;
                 }
 
+                ClearHoleAim();
                 return;
             }
 
             if (IsCarrying)
             {
+                ClearHoleAim();
                 UpdateCarrying();
             }
             else
@@ -231,6 +256,8 @@ namespace VexDesigner.Parts
                 hovered?.SetHovered(true);
             }
 
+            UpdateHoleAim();
+
             if (hovered != null && pointer.PrimaryPressedThisFrame)
             {
                 // The click may destroy the hovered object - paging the shelf
@@ -238,7 +265,73 @@ namespace VexDesigner.Parts
                 IWorkshopInteractable clicked = hovered;
                 hovered.SetHovered(false);
                 hovered = null;
+                ClearHoleAim();
                 clicked.OnPrimaryClick(this);
+            }
+        }
+
+        /// <summary>
+        /// Works out which hole, if any, the crosshair is on, and marks it.
+        ///
+        /// The hole lights up fully and its part drops to a faint wash. Both at
+        /// full brightness would leave it ambiguous whether the click is about
+        /// to act on the hole or on the part.
+        /// </summary>
+        private void UpdateHoleAim()
+        {
+            PartHoles holes = null;
+
+            if (hovered is PickupHandle handle)
+            {
+                holes = handle.GetComponent<PartHoles>();
+            }
+
+            bool farSide = actions != null && actions.FarSideHeld;
+
+            if (holes == null || !holes.HasHoles ||
+                !holes.TryAim(pointer.AimRay, farSide, out HoleHit hit))
+            {
+                ClearHoleAim();
+                return;
+            }
+
+            aimedHole = hit;
+
+            aimMarker ??= HoleHighlighter.Create("AimedHole", nearHoleColour);
+
+            // Coloured by what the user asked for, not by which of the hole's
+            // two faces happens to be stored first. Holding the far-side key
+            // recolours the marker, which is the only cue that the selection is
+            // now through the material rather than on this side of it.
+            aimMarker.SetColour(farSide ? farHoleColour : nearHoleColour);
+            aimMarker.Show(hit);
+
+            var highlight = holes.GetComponent<Highlightable>();
+            if (!ReferenceEquals(highlight, dimmed))
+            {
+                RestoreDimmed();
+                dimmed = highlight;
+            }
+
+            if (dimmed != null)
+            {
+                dimmed.HoverScale = partDimWhileAiming;
+            }
+        }
+
+        private void ClearHoleAim()
+        {
+            aimedHole = default;
+            aimMarker?.Hide();
+            RestoreDimmed();
+        }
+
+        private void RestoreDimmed()
+        {
+            if (dimmed != null)
+            {
+                dimmed.HoverScale = 1f;
+                dimmed = null;
             }
         }
 

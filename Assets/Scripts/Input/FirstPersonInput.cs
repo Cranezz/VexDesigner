@@ -75,6 +75,9 @@ namespace VexDesigner.InputSources
         /// <summary>Held to snap movement and rotation to fixed increments.</summary>
         public bool SnapHeld { get; private set; }
 
+        /// <summary>Held to target the far side of the hole being aimed at.</summary>
+        public bool FarSideHeld { get; private set; }
+
         private VexDesigner.Parts.InteractionLock interactionLock;
 
         private void Awake()
@@ -142,6 +145,7 @@ namespace VexDesigner.InputSources
                 PrecisionHeld = false;
                 JumpPressed = false;
                 SnapHeld = false;
+                FarSideHeld = false;
                 return;
             }
 
@@ -157,6 +161,10 @@ namespace VexDesigner.InputSources
             // nobody sprints while dragging a gizmo handle - and a single
             // obvious modifier beats two arbitrary ones.
             SnapHeld = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
+
+            // B for back side. Held rather than toggled: it is wanted for the
+            // one hole being looked at, not as a mode.
+            FarSideHeld = keyboard.bKey.isPressed;
         }
 
         private void ReadLook(Mouse mouse)

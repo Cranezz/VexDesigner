@@ -104,6 +104,14 @@ namespace VexDesigner.UI
                     Add("K", "Freeze in air");
                 }
             }
+            else if (placement.HasHoleTarget)
+            {
+                // Hole-specific bindings only appear when a hole is actually
+                // under the crosshair, so the list stays about what is in front
+                // of the user rather than what exists.
+                Add("LMB", "Pick up part");
+                Add("B", "Hold for far side");
+            }
             else if (placement.HasTarget)
             {
                 Add("LMB", "Pick up");

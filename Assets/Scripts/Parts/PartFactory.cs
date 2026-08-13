@@ -49,6 +49,10 @@ namespace VexDesigner.Parts
             // it without a null check and the Inspector always shows it.
             go.AddComponent<Modifications>();
 
+            // Hole lookup. Added even to parts with none, so nothing has to
+            // null-check before asking whether a hole is being aimed at.
+            go.AddComponent<PartHoles>().Initialise(definition);
+
             var collider = go.AddComponent<MeshCollider>();
 
             // A non-convex MeshCollider cannot move under physics in Unity, so

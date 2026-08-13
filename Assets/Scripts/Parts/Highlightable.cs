@@ -55,6 +55,38 @@ namespace VexDesigner.Parts
         private bool grabbed;
 
         /// <summary>
+        /// Scales the hover glow down without switching it off.
+        ///
+        /// Used when a specific hole is being aimed at: the hole lights up
+        /// fully and its part drops to a faint wash, which says "this hole, on
+        /// this part" in one glance. A part at full brightness would compete
+        /// with the hole and make it ambiguous which is being selected.
+        /// </summary>
+        public float HoverScale
+        {
+            get => hoverScale;
+            set
+            {
+                if (Mathf.Approximately(hoverScale, value))
+                {
+                    return;
+                }
+
+                hoverScale = value;
+
+                // Repaint immediately. Update only repaints while fading, so a
+                // change made once the glow has settled would otherwise not
+                // show until the next time the cursor moved on or off.
+                if (renderers != null)
+                {
+                    Apply();
+                }
+            }
+        }
+
+        private float hoverScale = 1f;
+
+        /// <summary>
         /// When false, the object refuses to highlight. Used to signal "you
         /// cannot interact with this right now" - for instance while the user
         /// is already carrying a part.
@@ -123,7 +155,7 @@ namespace VexDesigner.Parts
             // The three states compose by taking the brightest channel rather
             // than replacing each other, so a held frozen part reads as both
             // rather than the newer state hiding the older one.
-            Color emission = highlightColour * (intensity * current);
+            Color emission = highlightColour * (intensity * current * HoverScale);
 
             if (pinned)
             {

@@ -39,5 +39,14 @@ namespace VexDesigner.InputSources
         /// Held to snap movement and rotation to fixed increments.
         /// </summary>
         bool SnapHeld { get; }
+
+        /// <summary>
+        /// Held to target the far side of the hole being aimed at.
+        ///
+        /// Saves turning a part around to reach the opposite opening, which
+        /// matters because the far side is what a nut seats against and what
+        /// mates to another part.
+        /// </summary>
+        bool FarSideHeld { get; }
     }
 }
