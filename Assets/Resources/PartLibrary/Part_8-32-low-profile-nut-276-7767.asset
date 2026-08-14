@@ -19,7 +19,7 @@ MonoBehaviour:
     partName: '#8-32 Low Profile Nut'
     data1: Low Profile
     data2: '#8-32, 1/4" across flats'
-    weightGrams: 1.3
+    weightGrams: 0.33163396
     hasHoles: 1
     cuttable: 0
     material: 1

@@ -111,6 +111,68 @@ mesh density, but hole detection and physics must always run against
 full-detail geometry. Caching at import satisfies both — detection sees full
 detail, and the runtime only ever reads the cached result.
 
+### 3a. Hole types
+
+Every hole carries a type, and it decides what happens when a screw reaches
+it:
+
+- **Normal** — a plain opening. Says where something fits; grips nothing.
+  Every hole in a C-channel or a plate.
+- **Threaded** — bites on the thread. A screw reaching one clamps everything
+  between its head and that hole into a single assembly. Nuts are the obvious
+  case; threaded standoffs will be the next.
+- **Clamp** — grips the shaft rather than the thread (shaft collars, clamps).
+  Reserved; currently behaves as Normal.
+
+The type lives on the *hole*, not on the part. That is what lets a nut and a
+threaded standoff behave identically without either knowing the other exists,
+and it is the same three-way split the original Protobot used.
+
+---
+
+## 3b. Fastening
+
+Mating two holes only puts parts against each other. Nothing is held together
+until a screw runs through them and finds something that grips — which is how
+a real robot works, and why a screw through four plates with nothing on the
+end is just a loose screw.
+
+A screw knows three things about itself, all baked at import:
+
+- the direction of its shank, from the head toward the tip;
+- the point on the underside of its head, which is what lands on the metal;
+- its catalogue length under the head, which is how much material it can cross.
+
+The first two are measured off the mesh rather than declared, so they cannot
+drift from the model. The head height falls out as whatever the mesh is longer
+than the catalogue says — 0.087 in on every VEX star drive screw, which is the
+same constant the original hard-coded.
+
+From a screw's pose, everything else is derived rather than stored:
+
+- **What it passes through** — every hole whose axis is parallel to the shank
+  and whose two openings both sit on it, sorted by distance from under the
+  head. Distances are measured from the head because that is the natural zero:
+  it is where the screw meets the first piece of metal, and the figure the
+  catalogue length is quoted against.
+- **Where a nut can go** — the gaps between material along the shank. A nut
+  seats at the *top* of a gap, tightened up against whatever is above it,
+  because a nut floating in mid-shank holds nothing. The last gap is the run
+  past the final plate, which is the ordinary end-of-screw position; the
+  others are genuine mid-stack clamps, which is a real thing to do with a real
+  screw.
+- **What is fastened** — everything between the head and the deepest gripping
+  point. Nothing grips, nothing is joined.
+
+None of it is cached. The parts a screw holds can be moved, deleted, and
+eventually moved by another player, so a stored list would quietly come to
+describe a robot that no longer exists. Recomputing is cheap and cannot go
+stale.
+
+A nut that will not fit is refused rather than placed. A nut hanging off the
+end of a screw looks fastened and is not, which is a worse outcome than being
+told to fetch a longer screw.
+
 ---
 
 ## 4. Save format

@@ -17,6 +17,14 @@ namespace VexDesigner.Parts
     /// nowhere near the real metal - but the hole positions are known exactly,
     /// so the collider never needs to be consulted at all.
     /// </summary>
+    /// <remarks>
+    /// Runs in the editor as well as in play mode. The registry below is built
+    /// from OnEnable, and Unity only calls that outside play mode for scripts
+    /// marked this way - so without it the editor's own tools would ask what a
+    /// screw passes through and be told, quite wrongly, that the answer is
+    /// nothing at all.
+    /// </remarks>
+    [ExecuteAlways]
     public sealed class PartHoles : MonoBehaviour
     {
         /// <summary>
@@ -34,6 +42,24 @@ namespace VexDesigner.Parts
         private PartDefinition definition;
         private MeshRayTester tester;
         private bool testerResolved;
+
+        /// <summary>
+        /// Every part in the scene that has holes.
+        ///
+        /// Kept as a list rather than found on demand. Working out what a screw
+        /// runs through means asking every part in the workshop, and that
+        /// question is asked on every frame a nut is being offered to a screw -
+        /// which is far too often to be scanning the whole scene graph for
+        /// components.
+        /// </summary>
+        private static readonly System.Collections.Generic.List<PartHoles> Live =
+            new System.Collections.Generic.List<PartHoles>();
+
+        public static System.Collections.Generic.IReadOnlyList<PartHoles> All => Live;
+
+        private void OnEnable() => Live.Add(this);
+
+        private void OnDisable() => Live.Remove(this);
 
         public HoleSet Holes => definition == null ? null : definition.holeSet;
 

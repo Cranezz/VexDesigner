@@ -19,7 +19,7 @@ MonoBehaviour:
     partName: '#8-32 Hex Nut'
     data1: Hex
     data2: '#8-32, 11/32" across flats'
-    weightGrams: 1.2
+    weightGrams: 0.41076547
     hasHoles: 1
     cuttable: 0
     material: 1

@@ -19,7 +19,7 @@ MonoBehaviour:
     partName: '#8-32 Nylock Nut'
     data1: Nylock
     data2: '#8-32, 11/32" across flats'
-    weightGrams: 1.8
+    weightGrams: 0.5612311
     hasHoles: 1
     cuttable: 0
     material: 1

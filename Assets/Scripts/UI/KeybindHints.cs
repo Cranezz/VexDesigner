@@ -116,6 +116,15 @@ namespace VexDesigner.UI
                     Add("RMB", "Cancel");
                 }
             }
+            else if (placement.IsFittingFastener)
+            {
+                // A screw over a hole or a nut over a screw. Carrying controls
+                // are left off deliberately: nothing but fitting it is on offer
+                // while it is lined up.
+                Add("LMB", "Fit it here");
+                Add("Space", "Hold for far side");
+                Add("Move away", "Carry it instead");
+            }
             else if (placement.IsCarrying)
             {
                 Add("LMB", "Place");

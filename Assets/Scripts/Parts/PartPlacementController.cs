@@ -148,8 +148,30 @@ namespace VexDesigner.Parts
         private readonly System.Collections.Generic.List<Collider> suspendedColliders =
             new System.Collections.Generic.List<Collider>();
 
+        // --- Fitting a screw or a nut ---------------------------------------
+
+        /// <summary>The hole a carried screw is lined up with.</summary>
+        private HoleHit screwTarget;
+
+        /// <summary>Where a carried nut would go on the screw under the cursor.</summary>
+        private NutSeating nutTarget;
+
+        /// <summary>True while a fastener is snapped and awaiting a click.</summary>
+        private bool fastenerPreview;
+
+        private HoleHighlighter fastenerMarker;
+
+        [Tooltip("Colour of the seat a carried nut would take on a screw. " +
+                 "Turns to the warning colour when the screw is too short.")]
+        [SerializeField] private Color nutSeatColour = new Color(0.4f, 1f, 0.5f);
+
+        [SerializeField] private Color tooShortColour = new Color(1f, 0.3f, 0.25f);
+
         /// <summary>True while a part is being positioned by one of its holes.</summary>
         public bool IsCarryingByHole => carryingByHole;
+
+        /// <summary>True while a carried screw or nut is lined up to be fitted.</summary>
+        public bool IsFittingFastener => fastenerPreview;
 
         /// <summary>True when the carried hole is lined up on a destination.</summary>
         public bool HoleIsSnapped => carryingByHole && snapTarget.IsValid;
@@ -806,6 +828,8 @@ namespace VexDesigner.Parts
 
             snapTarget = default;
             snapMarker?.Hide();
+            fastenerMarker?.Hide();
+            fastenerPreview = false;
 
             RestoreColliders();
 
@@ -1022,13 +1046,28 @@ namespace VexDesigner.Parts
             // turning the part rather than turning the head.
             interactionLock.CameraOrbitLocked = rotating;
 
-            CarryWithBody();
-
             if (actions != null && actions.FreezePressed)
             {
                 ToggleFreezeCarried();
                 return;
             }
+
+            // A screw over a hole, or a nut over a screw, stops being carried
+            // and starts being fitted. It is the same gesture either way -
+            // hold it where it goes, click to leave it there - which is what
+            // makes fastening feel like part of placing rather than a mode of
+            // its own.
+            if (UpdateFastenerPreview())
+            {
+                if (pointer.PrimaryPressedThisFrame)
+                {
+                    CommitFastener();
+                }
+
+                return;
+            }
+
+            CarryWithBody();
 
             if (rotating)
             {
@@ -1044,6 +1083,267 @@ namespace VexDesigner.Parts
             {
                 Release();
             }
+        }
+
+        // ------------------------------------------------------------------
+        // Fitting screws and nuts
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Lines a carried screw up with the hole under the crosshair, or a
+        /// carried nut with the screw under it. True while something is lined
+        /// up and a click would fit it.
+        /// </summary>
+        private bool UpdateFastenerPreview()
+        {
+            PartDefinition definition = carriedDefinition;
+
+            if (definition == null || carried == null)
+            {
+                return EndFastenerPreview();
+            }
+
+            if (definition.IsScrew)
+            {
+                return UpdateScrewPreview(definition);
+            }
+
+            if (definition.IsNut)
+            {
+                return UpdateNutPreview(definition);
+            }
+
+            return EndFastenerPreview();
+        }
+
+        private bool UpdateScrewPreview(PartDefinition definition)
+        {
+            var holes = RaycastFor<PartHoles>(out _);
+            bool farSide = actions != null && actions.FarSideHeld;
+
+            if (holes == null || !holes.HasHoles ||
+                !holes.TryAim(pointer.AimRay, farSide, out HoleHit hit))
+            {
+                return EndFastenerPreview();
+            }
+
+            screwTarget = hit;
+            nutTarget = default;
+
+            BeginFastenerPreview();
+
+            if (FastenerFitting.ScrewPose(
+                    definition, targetRotation, hit, carried.transform.lossyScale,
+                    out Vector3 position, out Quaternion rotation))
+            {
+                PlaceGhost(position, rotation);
+            }
+
+            fastenerMarker ??= HoleHighlighter.Create("FastenerSeat", nutSeatColour);
+            fastenerMarker.SetColour(nutSeatColour);
+            fastenerMarker.Show(hit);
+
+            return true;
+        }
+
+        private bool UpdateNutPreview(PartDefinition definition)
+        {
+            // The *nearest* thing under the crosshair has to be the screw, not
+            // merely the nearest screw. Most of a driven screw is inside the
+            // metal it holds, and picking it through a plate would let a nut be
+            // seated by pointing at a part two inches away from where the screw
+            // is actually exposed.
+            var screw = RaycastNearest<PlacedScrew>();
+
+            if (screw == null)
+            {
+                return EndFastenerPreview();
+            }
+
+            // Recomputed every frame rather than when the screw was placed. The
+            // parts a screw runs through can be moved after the fact, and a nut
+            // offered against a stale idea of where the metal is would seat in
+            // mid-air.
+            //
+            // Passes only. Grouping happens on the click, not on the hover.
+            screw.RecomputePasses();
+
+            NutSeating seating = FastenerFitting.FindNutSeating(
+                screw, definition, pointer.AimRay);
+
+            if (!seating.IsValid)
+            {
+                return EndFastenerPreview();
+            }
+
+            nutTarget = seating;
+            screwTarget = default;
+
+            BeginFastenerPreview();
+
+            FastenerFitting.NutPose(
+                definition, targetRotation, seating, carried.transform.lossyScale,
+                out Vector3 position, out Quaternion rotation);
+
+            PlaceGhost(position, rotation);
+
+            // The marker is the only warning that a nut will not fit before the
+            // click that refuses it, so it changes colour rather than merely
+            // appearing.
+            fastenerMarker ??= HoleHighlighter.Create("FastenerSeat", nutSeatColour);
+            fastenerMarker.SetColour(seating.Fits ? nutSeatColour : tooShortColour);
+
+            fastenerMarker.Show(new HoleHit
+            {
+                Part = screw.GetComponent<PartHoles>(),
+                Face = new HoleFace
+                {
+                    localPosition = Vector3.zero,
+                    localNormal = Vector3.forward,
+                    width = definition.holeSet.IsEmpty
+                        ? 0.006f
+                        : definition.holeSet.holes[0].front.width * 1.6f,
+                },
+                WorldPosition = seating.WorldPosition,
+                WorldNormal = seating.WorldNormal,
+            });
+
+            return true;
+        }
+
+        /// <summary>
+        /// Switches the carried part from being chased by physics to being
+        /// placed exactly, the first time a fastener lines up.
+        /// </summary>
+        private void BeginFastenerPreview()
+        {
+            if (fastenerPreview)
+            {
+                return;
+            }
+
+            fastenerPreview = true;
+
+            if (carriedBody != null)
+            {
+                carriedBody.isKinematic = true;
+                carriedBody.linearVelocity = Vector3.zero;
+                carriedBody.angularVelocity = Vector3.zero;
+            }
+
+            SuspendColliders(carried);
+
+            ghost = carried.GetComponent<PartGhost>() ?? carried.AddComponent<PartGhost>();
+            ghost.SetGhosted(true);
+        }
+
+        private bool EndFastenerPreview()
+        {
+            if (!fastenerPreview)
+            {
+                return false;
+            }
+
+            fastenerPreview = false;
+            screwTarget = default;
+            nutTarget = default;
+
+            fastenerMarker?.Hide();
+
+            ghost?.SetGhosted(false);
+            ghost = null;
+
+            RestoreColliders();
+
+            // Back into the hand, where physics can chase the aim again.
+            if (carriedBody != null && carried != null)
+            {
+                carriedBody.isKinematic = false;
+                carriedBody.useGravity = false;
+                carriedBody.linearVelocity = Vector3.zero;
+                carriedBody.angularVelocity = Vector3.zero;
+
+                targetRotation = carried.transform.rotation;
+                lastCarrierYaw = transform.eulerAngles.y;
+            }
+
+            return false;
+        }
+
+        private void PlaceGhost(Vector3 position, Quaternion rotation)
+        {
+            carried.transform.SetPositionAndRotation(position, rotation);
+
+            if (carriedBody != null)
+            {
+                carriedBody.position = position;
+                carriedBody.rotation = rotation;
+            }
+        }
+
+        /// <summary>
+        /// Leaves the fastener where the preview put it, and works out what it
+        /// now holds together.
+        /// </summary>
+        private void CommitFastener()
+        {
+            if (nutTarget.IsValid && !nutTarget.Fits)
+            {
+                // Refused rather than fitted. A nut hanging off the end of a
+                // screw holds nothing, and silently placing one would leave a
+                // build that looks fastened and is not.
+                MessageBanner.Warn("Screw is too short — the nut does not reach");
+                return;
+            }
+
+            GameObject placed = carried;
+            PlacedScrew screw = nutTarget.Screw;
+            NutSeating seating = nutTarget;
+
+            ghost?.SetGhosted(false);
+            ghost = null;
+
+            fastenerMarker?.Hide();
+            RestoreColliders();
+
+            fastenerPreview = false;
+            screwTarget = default;
+            nutTarget = default;
+
+            // Pinned where it was placed. A fastener is positioned to a
+            // thousandth of an inch and gravity would undo that immediately.
+            HoleMating.SyncBody(placed.transform);
+
+            Release();
+
+            if (placed == null)
+            {
+                return;
+            }
+
+            var instance = placed.GetComponent<PartInstance>();
+
+            if (screw != null && instance != null)
+            {
+                screw.AttachNut(instance, seating.Distance);
+
+                MessageBanner.Info(seating.InGap
+                    ? "Nut fitted in the gap — everything above it is joined"
+                    : "Nut fitted — the stack is joined");
+
+                return;
+            }
+
+            // A screw. It records what it runs through, which is what decides
+            // whether anything is actually held together.
+            var driven = placed.GetComponent<PlacedScrew>()
+                ?? placed.AddComponent<PlacedScrew>();
+
+            driven.Refresh();
+
+            MessageBanner.Info(driven.GripDepth() >= 0f
+                ? "Screwed in — the stack is joined"
+                : "Screw placed — add a nut to fasten it");
         }
 
         /// <summary>
@@ -1101,7 +1401,8 @@ namespace VexDesigner.Parts
         /// </summary>
         private void FixedUpdate()
         {
-            if (!IsCarrying || carryingByHole || carriedBody == null || pointer == null)
+            if (!IsCarrying || carryingByHole || fastenerPreview ||
+                carriedBody == null || pointer == null)
             {
                 return;
             }
@@ -1343,6 +1644,37 @@ namespace VexDesigner.Parts
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// <typeparamref name="T"/> on the very first thing the ray meets, or
+        /// null if something else is in front of it.
+        ///
+        /// Different from <see cref="RaycastFor{T}"/>, which looks past
+        /// anything lacking the component. Both are wanted: reaching a part
+        /// behind the bench is right, reaching a screw behind a plate is not.
+        /// </summary>
+        private T RaycastNearest<T>() where T : class
+        {
+            int count = Physics.RaycastNonAlloc(
+                pointer.AimRay, hits, aimDistance, ~0, QueryTriggerInteraction.Ignore);
+
+            Collider nearest = null;
+            float nearestDistance = float.MaxValue;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (hits[i].distance >= nearestDistance ||
+                    IsCarriedCollider(hits[i].collider))
+                {
+                    continue;
+                }
+
+                nearest = hits[i].collider;
+                nearestDistance = hits[i].distance;
+            }
+
+            return nearest == null ? null : nearest.GetComponentInParent<T>();
         }
 
         private bool IsCarriedCollider(Collider collider)

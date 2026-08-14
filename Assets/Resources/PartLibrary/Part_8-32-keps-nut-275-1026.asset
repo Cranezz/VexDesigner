@@ -19,7 +19,7 @@ MonoBehaviour:
     partName: '#8-32 Keps Nut'
     data1: Keps
     data2: '#8-32, 11/32" across flats'
-    weightGrams: 1.3
+    weightGrams: 0.4944394
     hasHoles: 1
     cuttable: 0
     material: 1
