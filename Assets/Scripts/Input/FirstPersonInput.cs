@@ -70,14 +70,14 @@ namespace VexDesigner.InputSources
         /// <summary>Held for fine control of rotation and carry distance.</summary>
         public bool PrecisionHeld { get; private set; }
 
-        /// <summary>Jump.</summary>
-        public bool JumpPressed { get; private set; }
-
         /// <summary>Held to snap movement and rotation to fixed increments.</summary>
         public bool SnapHeld { get; private set; }
 
         /// <summary>Held to target the far side of the hole being aimed at.</summary>
         public bool FarSideHeld { get; private set; }
+
+        /// <summary>Toggles the rotation ring while a hole is snapped.</summary>
+        public bool RotateModifierPressed { get; private set; }
 
         private VexDesigner.Parts.InteractionLock interactionLock;
 
@@ -144,9 +144,9 @@ namespace VexDesigner.InputSources
                 RelativeTogglePressed = false;
                 RotateModifierHeld = false;
                 PrecisionHeld = false;
-                JumpPressed = false;
                 SnapHeld = false;
                 FarSideHeld = false;
+                RotateModifierPressed = false;
                 return;
             }
 
@@ -155,17 +155,18 @@ namespace VexDesigner.InputSources
             ModeTogglePressed = keyboard.gKey.wasPressedThisFrame;
             RelativeTogglePressed = keyboard.yKey.wasPressedThisFrame;
             RotateModifierHeld = keyboard.rKey.isPressed;
+            RotateModifierPressed = keyboard.rKey.wasPressedThisFrame;
             PrecisionHeld = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
-            JumpPressed = keyboard.spaceKey.wasPressedThisFrame;
-
             // Shares Shift with sprinting. They never overlap in practice -
             // nobody sprints while dragging a gizmo handle - and a single
             // obvious modifier beats two arbitrary ones.
             SnapHeld = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
 
-            // B for back side. Held rather than toggled: it is wanted for the
-            // one hole being looked at, not as a mode.
-            FarSideHeld = keyboard.bKey.isPressed;
+            // Space for the far side. Held rather than toggled: it is wanted
+            // for the one hole being looked at, not as a mode. Space is free
+            // because there is no jumping - this is a workshop, and hopping
+            // around a bench full of small parts serves nothing.
+            FarSideHeld = keyboard.spaceKey.isPressed;
         }
 
         private void ReadLook(Mouse mouse)

@@ -86,38 +86,49 @@ namespace VexDesigner.UI
                 return string.Empty;
             }
 
-            if (placement.IsCarrying)
+            if (placement.IsCarryingByHole)
             {
-                if (placement.CarriedIsFrozen)
+                // Three distinct states while a hole is in hand, and each one
+                // changes what the same two buttons do. Listing all of them at
+                // once would be worse than listing none.
+                if (placement.IsRotatingAboutHole)
                 {
-                    Add("RMB", "Rotate");
-                    Add("K", "Unfreeze");
-                    Add("LMB", "Release");
+                    Add("Drag", "Turn about the join");
+                    Add("Shift", "Snap to 15°");
+                    Add("R", "Back to moving");
+                    Add("LMB", "Place");
+                }
+                else if (placement.HoleIsSnapped)
+                {
+                    Add("LMB", "Place here");
+                    Add("R", "Rotate about the join");
+                    Add("Space", "Hold for far side");
+                    Add("RMB", "Cancel");
                 }
                 else
                 {
-                    Add("LMB", "Place");
-                    Add("RMB", "Rotate");
+                    Add("LMB", "Drop here");
                     Add("Scroll", "Distance");
-                    Add("Ctrl", "Precise");
-                    Add("Alt", "Place repeatedly");
-                    Add("K", "Freeze in air");
+                    Add("Space", "Hold for far side");
+                    Add("RMB", "Cancel");
                 }
             }
-            else if (placement.HasAnchoredHole)
+            else if (placement.IsCarrying)
             {
-                Add("LMB", "Mate to this hole");
-                Add("RMB", "Cancel mate");
-                Add("B", "Hold for far side");
+                Add("LMB", "Place");
+                Add("RMB", "Rotate");
+                Add("Scroll", "Distance");
+                Add("Ctrl", "Precise");
+                Add("Alt", "Place repeatedly");
+                Add("K", placement.CarriedIsFrozen ? "Unfreeze" : "Freeze in air");
             }
             else if (placement.HasHoleTarget)
             {
                 // Hole-specific bindings only appear when a hole is actually
                 // under the crosshair, so the list stays about what is in front
                 // of the user rather than what exists.
-                Add("LMB", "Pick up part");
-                Add("RMB", "Anchor hole for mating");
-                Add("B", "Hold for far side");
+                Add("LMB", "Grab by this hole");
+                Add("Space", "Hold for far side");
             }
             else if (placement.HasTarget)
             {

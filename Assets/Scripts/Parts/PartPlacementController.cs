@@ -72,16 +72,14 @@ namespace VexDesigner.Parts
         private InteractionLock interactionLock;
 
         private readonly RaycastHit[] hits = new RaycastHit[24];
-        private readonly Collider[] overlapBuffer = new Collider[16];
 
         private IWorkshopInteractable hovered;
 
         // --- Hole aiming ----------------------------------------------------
 
         private HoleHighlighter aimMarker;
-        private HoleHighlighter anchorMarker;
+        private HoleHighlighter snapMarker;
         private HoleHit aimedHole;
-        private HoleHit anchoredHole;
         private Highlightable dimmed;
 
         [Header("Holes")]
@@ -96,18 +94,65 @@ namespace VexDesigner.Parts
                  "targeted. Low enough that the hole clearly wins.")]
         [SerializeField, Range(0f, 1f)] private float partDimWhileAiming = 0.18f;
 
-        [Tooltip("Colour of a hole anchored for mating. Distinct from both aim " +
-                 "colours, since it stays on screen while another hole is being " +
-                 "chosen and must not be mistaken for the one under the cursor.")]
-        [SerializeField] private Color anchorColour = new Color(0.35f, 1f, 0.45f);
+        [Tooltip("Colour of the hole a carried part is about to mate to. " +
+                 "Distinct from both aim colours, since it marks a destination " +
+                 "rather than a selection.")]
+        [SerializeField] private Color snapColour = new Color(0.35f, 1f, 0.45f);
 
-        /// <summary>True while a hole is waiting to be mated to another.</summary>
-        public bool HasAnchoredHole => anchoredHole.IsValid;
+        [Tooltip("Degrees the roll snaps to while the snap modifier is held " +
+                 "during hole rotation. Measured from the square-on position, " +
+                 "so the increments are relative to the part being joined to.")]
+        [SerializeField] private float holeRollSnapDegrees = 15f;
+
+        [Tooltip("Increment the automatic roll is rounded to when a hole first " +
+                 "lands on another. A quarter turn, because parts bolted " +
+                 "together are square to each other far more often than not, " +
+                 "and anything else is reached with the rotation dial.")]
+        [SerializeField] private float squareOnSnapDegrees = 90f;
 
         /// <summary>The hole currently under the crosshair, if any.</summary>
         public HoleHit AimedHole => aimedHole;
 
         public bool HasHoleTarget => aimedHole.IsValid;
+
+        // --- Carrying a part by one of its holes ----------------------------
+
+        /// <summary>
+        /// The hole the carried part is held by. Its <c>Face</c> is in the
+        /// part's local space and so stays valid however the part is moved.
+        /// </summary>
+        private HoleHit carriedHole;
+
+        private PartHoles carriedHoles;
+
+        /// <summary>The hole under the crosshair that the carried one will meet.</summary>
+        private HoleHit snapTarget;
+
+        private bool carryingByHole;
+        private bool rotatingAboutHole;
+
+        /// <summary>Manual roll about the join, in degrees, on top of the snap.</summary>
+        private float holeRoll;
+
+        private Vector3 ringZeroDirection;
+        private PartGhost ghost;
+        private HoleRotationRing rotationRing;
+
+        /// <summary>Pose at the moment of grabbing, so a cancel can undo it.</summary>
+        private Vector3 holeCarryStartPosition;
+        private Quaternion holeCarryStartRotation;
+
+        private readonly System.Collections.Generic.List<Collider> suspendedColliders =
+            new System.Collections.Generic.List<Collider>();
+
+        /// <summary>True while a part is being positioned by one of its holes.</summary>
+        public bool IsCarryingByHole => carryingByHole;
+
+        /// <summary>True when the carried hole is lined up on a destination.</summary>
+        public bool HoleIsSnapped => carryingByHole && snapTarget.IsValid;
+
+        /// <summary>True while the rotation dial is up.</summary>
+        public bool IsRotatingAboutHole => rotatingAboutHole;
 
         private GameObject carried;
         private PartDefinition carriedDefinition;
@@ -227,7 +272,12 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            if (IsCarrying)
+            if (carryingByHole)
+            {
+                ClearHoleAim();
+                UpdateHoleCarry();
+            }
+            else if (IsCarrying)
             {
                 ClearHoleAim();
                 UpdateCarrying();
@@ -268,18 +318,12 @@ namespace VexDesigner.Parts
 
             UpdateHoleAim();
 
-            // Right-click anchors a hole; the next left-click on another hole
-            // brings the anchored part to it. Checked before the ordinary click
-            // handling, or the second click would pick the part up instead.
-            if (pointer.SecondaryPressedThisFrame)
+            // A hole under the crosshair takes the click. Grabbing the part by
+            // that hole is what the user was pointing at; picking it up by the
+            // surface is what they get anywhere else on it.
+            if (HasHoleTarget && pointer.PrimaryPressedThisFrame)
             {
-                ToggleAnchor();
-                return;
-            }
-
-            if (anchoredHole.IsValid && pointer.PrimaryPressedThisFrame && HasHoleTarget)
-            {
-                CompleteMate();
+                BeginCarryByHole(aimedHole);
                 return;
             }
 
@@ -331,17 +375,6 @@ namespace VexDesigner.Parts
             aimMarker.SetColour(farSide ? farHoleColour : nearHoleColour);
             aimMarker.Show(hit);
 
-            // Re-resolve the anchor every frame so its marker tracks its part.
-            // The part can still be walked around, grabbed and moved while a
-            // mate is pending, and a marker left at stale world coordinates
-            // would float away from the hole it belongs to.
-            if (anchoredHole.IsValid && anchorMarker != null)
-            {
-                anchoredHole = anchoredHole.Part.FaceAt(
-                    anchoredHole.HoleIndex, anchoredHole.IsBackFace);
-                anchorMarker.Show(anchoredHole);
-            }
-
             var highlight = holes.GetComponent<Highlightable>();
             if (!ReferenceEquals(highlight, dimmed))
             {
@@ -353,58 +386,6 @@ namespace VexDesigner.Parts
             {
                 dimmed.HoverScale = partDimWhileAiming;
             }
-        }
-
-        /// <summary>
-        /// Anchors the hole under the crosshair, or clears the anchor.
-        ///
-        /// The anchored part is the one that will move. That is the way round
-        /// it has to be: the user picks the piece they are holding conceptually,
-        /// then points at where it should go.
-        /// </summary>
-        private void ToggleAnchor()
-        {
-            if (anchoredHole.IsValid)
-            {
-                ClearAnchor();
-                MessageBanner.Info("Mate cancelled");
-                return;
-            }
-
-            if (!HasHoleTarget)
-            {
-                return;
-            }
-
-            anchoredHole = aimedHole;
-
-            anchorMarker ??= HoleHighlighter.Create("AnchoredHole", anchorColour);
-            anchorMarker.SetColour(anchorColour);
-            anchorMarker.Show(anchoredHole);
-
-            MessageBanner.Info("Hole anchored — click another hole to mate");
-        }
-
-        private void CompleteMate()
-        {
-            if (aimedHole.Part == anchoredHole.Part)
-            {
-                MessageBanner.Warn("Pick a hole on a different part");
-                return;
-            }
-
-            if (HoleMating.Mate(anchoredHole, aimedHole))
-            {
-                MessageBanner.Info("Mated — not joined until a screw goes through");
-            }
-
-            ClearAnchor();
-        }
-
-        private void ClearAnchor()
-        {
-            anchoredHole = default;
-            anchorMarker?.Hide();
         }
 
         private void ClearHoleAim()
@@ -421,6 +402,365 @@ namespace VexDesigner.Parts
                 dimmed.HoverScale = 1f;
                 dimmed = null;
             }
+        }
+
+        // ------------------------------------------------------------------
+        // Carrying a part by one of its holes
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Picks a part up by the hole under the crosshair.
+        ///
+        /// The part turns to glass and hangs off that hole, which is the whole
+        /// idea: from here on the hole is the handle, and every other hole in
+        /// the workshop is somewhere it could go. Being able to see through the
+        /// part matters because the join being judged is on the far side of it.
+        /// </summary>
+        private void BeginCarryByHole(HoleHit hit)
+        {
+            GameObject go = hit.Part.gameObject;
+            var instance = go.GetComponent<PartInstance>();
+
+            float distance = Mathf.Clamp(
+                Vector3.Distance(pointer.AimRay.origin, hit.WorldPosition),
+                minCarryDistance,
+                maxCarryDistance);
+
+            holeCarryStartPosition = go.transform.position;
+            holeCarryStartRotation = go.transform.rotation;
+
+            AttachToHand(
+                go,
+                instance != null ? instance.Definition : null,
+                distance,
+                hit.WorldPosition);
+
+            carryingByHole = true;
+            carriedHoles = hit.Part;
+            carriedHole = hit;
+            snapTarget = default;
+            rotatingAboutHole = false;
+            holeRoll = 0f;
+
+            // Driven straight through the transform rather than through the
+            // solver. A ghost is a proposal, not an object: it has to be able
+            // to pass through the very part it is being lined up against, and
+            // it has to land exactly on the hole rather than wherever a chase
+            // controller got to this frame.
+            if (carriedBody != null)
+            {
+                carriedBody.isKinematic = true;
+                carriedBody.linearVelocity = Vector3.zero;
+                carriedBody.angularVelocity = Vector3.zero;
+            }
+
+            SuspendColliders(go);
+
+            ghost = go.GetComponent<PartGhost>() ?? go.AddComponent<PartGhost>();
+            ghost.SetGhosted(true);
+
+            MessageBanner.Info("Hold a hole against another to join — R for rotation");
+        }
+
+        private void UpdateHoleCarry()
+        {
+            // The view is pinned only while the dial is up, where mouse
+            // movement means rotation. The rest of the time the part is being
+            // aimed, and aiming is done by looking.
+            interactionLock.CameraOrbitLocked = rotatingAboutHole;
+
+            TurnFreeOrientationWithBody();
+
+            if (actions != null && actions.RotateModifierPressed)
+            {
+                ToggleHoleRotation();
+            }
+
+            if (rotatingAboutHole)
+            {
+                UpdateHoleRoll();
+            }
+            else
+            {
+                AdjustCarryDistance();
+                UpdateSnapTarget();
+            }
+
+            ApplyHolePose();
+
+            // Right-click backs out. Without it a part grabbed by the wrong
+            // hole could only be got rid of by putting it somewhere, and the
+            // pose it was grabbed from would be gone.
+            if (pointer.SecondaryPressedThisFrame)
+            {
+                EndHoleCarry(commit: false);
+                return;
+            }
+
+            if (pointer.PrimaryPressedThisFrame)
+            {
+                EndHoleCarry(commit: true);
+            }
+        }
+
+        /// <summary>
+        /// Turns the free orientation with the player, so a part held loose
+        /// stays the same way round relative to them as they turn.
+        ///
+        /// Deliberately skipped while snapped or rotating. Once the part is on
+        /// a join, its orientation belongs to that join; dragging it round with
+        /// the body would pull it off the thing it was just aligned to.
+        /// </summary>
+        private void TurnFreeOrientationWithBody()
+        {
+            float yaw = transform.eulerAngles.y;
+            float delta = Mathf.DeltaAngle(lastCarrierYaw, yaw);
+            lastCarrierYaw = yaw;
+
+            if (snapTarget.IsValid || rotatingAboutHole || Mathf.Abs(delta) < 0.001f)
+            {
+                return;
+            }
+
+            targetRotation = Quaternion.AngleAxis(delta, Vector3.up) * targetRotation;
+        }
+
+        /// <summary>
+        /// Looks for a hole on another part to line up with.
+        ///
+        /// The carried part's own holes are excluded - a part cannot be mated
+        /// to itself, and its holes are the ones nearest the ray by a long way.
+        /// </summary>
+        private void UpdateSnapTarget()
+        {
+            bool wasSnapped = snapTarget.IsValid;
+
+            var holes = RaycastFor<PartHoles>(out _);
+            bool farSide = actions != null && actions.FarSideHeld;
+
+            if (holes == null || holes == carriedHoles || !holes.HasHoles ||
+                !holes.TryAim(pointer.AimRay, farSide, out HoleHit hit))
+            {
+                if (wasSnapped)
+                {
+                    // Coming off a join, keep the orientation the join gave
+                    // rather than springing back to how the part was held
+                    // before. Snapping is usually most of the way to right, and
+                    // throwing that away on the smallest wobble of the cursor
+                    // would make the part impossible to hold steady.
+                    targetRotation = carried.transform.rotation;
+                    holeRoll = 0f;
+                    StopHoleRotation();
+                }
+
+                snapTarget = default;
+                snapMarker?.Hide();
+                return;
+            }
+
+            snapTarget = hit;
+
+            snapMarker ??= HoleHighlighter.Create("SnapTargetHole", snapColour);
+            snapMarker.SetColour(snapColour);
+            snapMarker.Show(hit);
+        }
+
+        /// <summary>
+        /// Puts the part where the current state says it goes: on the join if
+        /// there is one, hanging off the crosshair if not.
+        /// </summary>
+        private void ApplyHolePose()
+        {
+            Transform moving = carried.transform;
+
+            if (snapTarget.IsValid)
+            {
+                // Re-resolve the destination every frame. The part it belongs
+                // to can be moved by something else - another player, later -
+                // and a pose computed against a stale hole position would leave
+                // the ghost floating beside the join rather than on it.
+                snapTarget = snapTarget.Part.FaceAt(snapTarget.HoleIndex, snapTarget.IsBackFace);
+                snapMarker?.Show(snapTarget);
+
+                if (HoleMating.ComputePose(
+                        carriedHole.Face, targetRotation, snapTarget,
+                        squareOnSnapDegrees, holeRoll, moving.lossyScale,
+                        out Vector3 position, out Quaternion rotation,
+                        out Vector3 zeroDirection))
+                {
+                    moving.SetPositionAndRotation(position, rotation);
+                    ringZeroDirection = zeroDirection;
+                }
+            }
+            else
+            {
+                Ray ray = pointer.AimRay;
+                Vector3 aimPoint = ray.origin + (ray.direction * carryDistance);
+
+                // Rotation first, then slide the grabbed hole onto the aim
+                // point - turning the part moves its holes, so the offset has
+                // to be measured after the turn.
+                moving.rotation = targetRotation;
+                moving.position += aimPoint - moving.TransformPoint(carriedHole.Face.localPosition);
+            }
+
+            // A kinematic body still has its own idea of where it is, and an
+            // interpolated one rebuilds the rendered pose from it. Told
+            // directly, or the ghost lags a frame behind the cursor.
+            if (carriedBody != null)
+            {
+                carriedBody.position = moving.position;
+                carriedBody.rotation = moving.rotation;
+            }
+
+            UpdateRotationRing();
+        }
+
+        /// <summary>
+        /// Raises or lowers the rotation dial.
+        ///
+        /// Only meaningful on a join: the dial turns the part about the mating
+        /// axis, and with nothing to mate to there is no axis to turn about.
+        /// Off the join, R is the way back to moving the part around.
+        /// </summary>
+        private void ToggleHoleRotation()
+        {
+            if (rotatingAboutHole)
+            {
+                StopHoleRotation();
+                MessageBanner.Info("Rotation off — move the part, R to rotate again");
+                return;
+            }
+
+            if (!snapTarget.IsValid)
+            {
+                MessageBanner.Warn("Hold the hole against another one first");
+                return;
+            }
+
+            rotatingAboutHole = true;
+            MessageBanner.Info(
+                $"Rotating about the join — hold Shift for {holeRollSnapDegrees:0}°");
+        }
+
+        private void StopHoleRotation()
+        {
+            rotatingAboutHole = false;
+            rotationRing?.Hide();
+            interactionLock.CameraOrbitLocked = false;
+        }
+
+        private void UpdateHoleRoll()
+        {
+            float rate = rotationDegreesPerPixel * PrecisionFactor;
+
+            // Horizontal drag only. The dial has one degree of freedom, and
+            // feeding vertical movement into it as well makes the angle jump
+            // about while the hand is merely unsteady.
+            holeRoll += pointer.DragDelta.x * rate;
+
+            if (actions != null && actions.SnapHeld && holeRollSnapDegrees > 0f)
+            {
+                holeRoll = Mathf.Round(holeRoll / holeRollSnapDegrees) * holeRollSnapDegrees;
+            }
+
+            holeRoll = Mathf.Repeat(holeRoll, 360f);
+        }
+
+        private void UpdateRotationRing()
+        {
+            if (!rotatingAboutHole || !snapTarget.IsValid)
+            {
+                rotationRing?.Hide();
+                return;
+            }
+
+            rotationRing ??= HoleRotationRing.Create(snapColour);
+            rotationRing.Show(
+                snapTarget.WorldPosition, snapTarget.WorldNormal, ringZeroDirection, holeRoll);
+        }
+
+        /// <summary>
+        /// Lets go of the hole: either leaving the part where the ghost was, or
+        /// putting it back where it came from.
+        /// </summary>
+        private void EndHoleCarry(bool commit)
+        {
+            GameObject placed = carried;
+            bool mated = commit && snapTarget.IsValid;
+
+            if (!commit && placed != null)
+            {
+                placed.transform.SetPositionAndRotation(
+                    holeCarryStartPosition, holeCarryStartRotation);
+            }
+
+            ghost?.SetGhosted(false);
+            ghost = null;
+
+            StopHoleRotation();
+
+            snapTarget = default;
+            snapMarker?.Hide();
+
+            RestoreColliders();
+
+            if (placed != null && mated)
+            {
+                // Pinned rather than dropped. The part was placed against a
+                // face on purpose, and gravity would pull it straight back off.
+                HoleMating.SyncBody(placed.transform);
+            }
+
+            // Released while the hole flag is still set, so the repeat
+            // modifier does not read this as "place another one" - Alt means
+            // stamping copies from the shelf, not duplicating a part that was
+            // only being repositioned.
+            Release();
+
+            carryingByHole = false;
+            carriedHoles = null;
+            carriedHole = default;
+            holeRoll = 0f;
+
+            if (mated)
+            {
+                MessageBanner.Info("Placed — not joined until a screw goes through");
+            }
+        }
+
+        /// <summary>
+        /// Switches off the ghost's colliders for the duration.
+        ///
+        /// A ghost is meant to be held inside the part it is being fitted to,
+        /// so it must not push anything and nothing must push it. It also keeps
+        /// the aim ray clear, so holes behind the ghost can still be chosen.
+        /// </summary>
+        private void SuspendColliders(GameObject go)
+        {
+            suspendedColliders.Clear();
+
+            foreach (Collider collider in go.GetComponentsInChildren<Collider>())
+            {
+                if (collider.enabled)
+                {
+                    collider.enabled = false;
+                    suspendedColliders.Add(collider);
+                }
+            }
+        }
+
+        private void RestoreColliders()
+        {
+            foreach (Collider collider in suspendedColliders)
+            {
+                if (collider != null)
+                {
+                    collider.enabled = true;
+                }
+            }
+
+            suspendedColliders.Clear();
         }
 
         // ------------------------------------------------------------------
@@ -498,9 +838,8 @@ namespace VexDesigner.Parts
 
             var instance = existing.GetComponent<PartInstance>();
 
-            // A frozen part stays frozen when grabbed. Only K releases it -
-            // otherwise anchoring a sub-assembly would be undone by the very
-            // act of reaching for it.
+            // A frozen part stays frozen when grabbed - only K releases it -
+            // but it is still fully movable while held. See AttachToHand.
             Vector3 grabPoint = hasLastHit ? lastHitPoint : existing.transform.position;
             float distance = hasLastHit
                 ? Mathf.Clamp(lastHitDistance, minCarryDistance, maxCarryDistance)
@@ -540,7 +879,11 @@ namespace VexDesigner.Parts
 
             if (carriedBody != null)
             {
-                carriedBody.isKinematic = CarriedIsFrozen;
+                // Made dynamic even when frozen. Freezing means "does not fall",
+                // not "does not move" - a pinned sub-assembly still has to be
+                // nudged into place, and being unable to move what you are
+                // holding reads as the grab having failed.
+                carriedBody.isKinematic = false;
                 carriedBody.useGravity = false;
                 carriedBody.linearVelocity = Vector3.zero;
                 carriedBody.angularVelocity = Vector3.zero;
@@ -576,11 +919,9 @@ namespace VexDesigner.Parts
         {
             bool rotating = pointer.SecondaryHeld;
 
-            // Look is locked while rotating, and for the whole time a frozen
-            // part is held. A pinned part does not move, so letting the view
-            // swing away from it would only break the illusion of holding it -
-            // and would immediately lose sight of what is being rotated.
-            interactionLock.CameraOrbitLocked = rotating || CarriedIsFrozen;
+            // Look is locked only while rotating, where mouse movement means
+            // turning the part rather than turning the head.
+            interactionLock.CameraOrbitLocked = rotating;
 
             CarryWithBody();
 
@@ -593,10 +934,6 @@ namespace VexDesigner.Parts
             if (rotating)
             {
                 RotateCarried(pointer.DragDelta);
-            }
-            else if (CarriedIsFrozen)
-            {
-                WarnIfTryingToMove();
             }
             else
             {
@@ -626,16 +963,7 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            Quaternion turn = Quaternion.AngleAxis(delta, Vector3.up);
-            targetRotation = turn * targetRotation;
-
-            // A pinned part has no live body to steer, so it is turned
-            // directly. Rotating it about the grab point keeps it under the
-            // aim rather than swinging away.
-            if (CarriedIsFrozen && carriedInstance?.Group != null)
-            {
-                RotateFrozenGroup(turn);
-            }
+            targetRotation = Quaternion.AngleAxis(delta, Vector3.up) * targetRotation;
         }
 
         /// <summary>
@@ -674,7 +1002,7 @@ namespace VexDesigner.Parts
         /// </summary>
         private void FixedUpdate()
         {
-            if (!IsCarrying || carriedBody == null || CarriedIsFrozen || pointer == null)
+            if (!IsCarrying || carryingByHole || carriedBody == null || pointer == null)
             {
                 return;
             }
@@ -781,91 +1109,8 @@ namespace VexDesigner.Parts
                 targetRotation = Quaternion.RotateTowards(
                     current, targetRotation, maxTargetLead);
             }
-
-            // A frozen part is kinematic, so the solver will not steer it and
-            // it has to be turned directly - which means checking the result
-            // by hand, or it can be twisted straight into the bench.
-            if (CarriedIsFrozen && carriedInstance?.Group != null)
-            {
-                RotateFrozenGroup(delta);
-            }
         }
 
-        /// <summary>
-        /// Turns a pinned assembly, undoing the turn if it would push the part
-        /// into something.
-        ///
-        /// A kinematic body is invisible to the contact solver, so nothing
-        /// stops it passing through the bench. Applying the rotation, testing
-        /// for overlap, and reverting on failure gives the same outcome the
-        /// solver would - the rotation simply stops at the surface - without
-        /// making the part dynamic again.
-        /// </summary>
-        private void RotateFrozenGroup(Quaternion delta)
-        {
-            PartGroup group = carriedInstance.Group;
-            Vector3 pivot = GrabWorldPoint;
-
-            group.Rotate(delta, pivot);
-
-            if (IsGroupOverlapping(group))
-            {
-                group.Rotate(Quaternion.Inverse(delta), pivot);
-            }
-        }
-
-        private bool IsGroupOverlapping(PartGroup group)
-        {
-            foreach (PartInstance part in group.Members)
-            {
-                var collider = part == null ? null : part.GetComponent<Collider>();
-                if (collider == null || !collider.enabled)
-                {
-                    continue;
-                }
-
-                Bounds bounds = collider.bounds;
-                int count = Physics.OverlapBoxNonAlloc(
-                    bounds.center, bounds.extents, overlapBuffer,
-                    Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
-
-                for (int i = 0; i < count; i++)
-                {
-                    Collider other = overlapBuffer[i];
-                    if (other == collider || IsCarriedCollider(other))
-                    {
-                        continue;
-                    }
-
-                    // A bounds overlap is only a hint; ComputePenetration is
-                    // the exact test, and at these tolerances the difference
-                    // matters - parts routinely sit within a millimetre of each
-                    // other without actually intersecting.
-                    if (Physics.ComputePenetration(
-                            collider, collider.transform.position, collider.transform.rotation,
-                            other, other.transform.position, other.transform.rotation,
-                            out _, out float depth) && depth > 0.0004f)
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private void WarnIfTryingToMove()
-        {
-            bool aiming = pointer.DragDelta.sqrMagnitude > 4f;
-            bool scrolling = !Mathf.Approximately(look?.ZoomDelta ?? 0f, 0f);
-
-            if (aiming || scrolling)
-            {
-                // Silence here would be indistinguishable from a bug. Naming
-                // the key teaches the binding exactly when it is wanted.
-                MessageBanner.Warn("Part is frozen — press K to unfreeze");
-            }
-        }
 
         private void ToggleFreezeCarried()
         {
@@ -877,10 +1122,9 @@ namespace VexDesigner.Parts
 
             group.SetFrozen(!group.IsFrozen);
 
-            if (group.IsFrozen)
-            {
-                MessageBanner.Info("Frozen — K to release");
-            }
+            MessageBanner.Info(group.IsFrozen
+                ? "Frozen — floats in place, still movable. K to release"
+                : "Unfrozen");
         }
 
         private void Release()
@@ -943,7 +1187,7 @@ namespace VexDesigner.Parts
 
             // Alt held: keep going with another of the same part, so a run of
             // identical parts does not mean a return trip to the shelf.
-            if (!frozen && pointer.RepeatModifierHeld && definition != null)
+            if (!frozen && !carryingByHole && pointer.RepeatModifierHeld && definition != null)
             {
                 BeginCarryNew(definition, heldAt);
             }
@@ -1043,6 +1287,13 @@ namespace VexDesigner.Parts
             if (interactionLock != null)
             {
                 interactionLock.CameraOrbitLocked = false;
+            }
+
+            // A ghosted part left behind by a disabled controller would stay
+            // see-through and intangible with nothing able to put it right.
+            if (carryingByHole)
+            {
+                EndHoleCarry(commit: false);
             }
         }
     }

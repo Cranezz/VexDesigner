@@ -32,9 +32,6 @@ namespace VexDesigner.InputSources
         /// </summary>
         bool PrecisionHeld { get; }
 
-        /// <summary>Jump.</summary>
-        bool JumpPressed { get; }
-
         /// <summary>
         /// Held to snap movement and rotation to fixed increments.
         /// </summary>
@@ -48,5 +45,8 @@ namespace VexDesigner.InputSources
         /// mates to another part.
         /// </summary>
         bool FarSideHeld { get; }
+
+        /// <summary>Toggle the rotation ring while a hole is snapped.</summary>
+        bool RotateModifierPressed { get; }
     }
 }
