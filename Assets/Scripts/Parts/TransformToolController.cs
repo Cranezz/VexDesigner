@@ -55,6 +55,13 @@ namespace VexDesigner.Parts
         // reference. Frame-to-frame deltas accumulate drift over a long drag.
         private Vector3 dragAxis;
         private Vector3 dragOrigin;
+
+        /// <summary>
+        /// Hole the gizmo is pinned to, if one was clicked. Re-resolved every
+        /// frame rather than stored as a position, so it follows the part it
+        /// belongs to when that part moves.
+        /// </summary>
+        private HoleHit pivotHole;
         private float lastAxisOffset;
 
         /// <summary>Where the assembly's centre was when the drag began.</summary>
@@ -74,7 +81,10 @@ namespace VexDesigner.Parts
         /// one way, against it the other - so grabbing the top of a ring and
         /// pulling right turns it clockwise, as the ring itself would.
         /// </summary>
-        private Vector2 rotateScreenTangent;
+        /// <summary>Ring angle the pointer was at when the handle was grabbed.</summary>
+        private float rotateReferenceAngle;
+
+        private bool hasRotateReference;
 
         private float rotateAccumulated;
 
@@ -233,6 +243,30 @@ namespace VexDesigner.Parts
         /// </summary>
         public void Select(PartGroup group)
         {
+            Select(group, default);
+        }
+
+        /// <summary>
+        /// Selects an assembly and puts the gizmo on a particular hole.
+        ///
+        /// Working from a hole rather than from the assembly's middle is what
+        /// makes the tool exact. The middle of a C-channel is a point of no
+        /// significance - it is not on the grid, it is not where anything
+        /// attaches, and a half-inch step measured from it lands between holes.
+        /// A hole is a real feature, so a rotation about it swings the part the
+        /// way a screw through it would, and a snapped move counts whole hole
+        /// pitches.
+        /// </summary>
+        public void Select(PartGroup group, HoleHit pivot)
+        {
+            // The pivot is set even when the group has not changed: clicking a
+            // second hole on an already-selected part is how the pivot gets
+            // moved, and refusing it would make the gizmo stick to the first
+            // hole ever clicked.
+            pivotHole = pivot.IsValid && (group == null || BelongsTo(pivot, group))
+                ? pivot
+                : default;
+
             if (ReferenceEquals(group, selection))
             {
                 return;
@@ -301,6 +335,39 @@ namespace VexDesigner.Parts
         // Gizmo placement
         // ------------------------------------------------------------------
 
+        /// <summary>
+        /// Where the gizmo sits: the clicked hole if there is one, otherwise
+        /// the middle of the selection.
+        /// </summary>
+        private Vector3 PivotPoint
+        {
+            get
+            {
+                if (pivotHole.IsValid && pivotHole.Part != null)
+                {
+                    pivotHole = pivotHole.Part.FaceAt(
+                        pivotHole.HoleIndex, pivotHole.IsBackFace);
+
+                    return pivotHole.WorldPosition;
+                }
+
+                return selection != null ? selection.GetCentre() : Vector3.zero;
+            }
+        }
+
+        private static bool BelongsTo(HoleHit hole, PartGroup group)
+        {
+            foreach (PartInstance member in group.Members)
+            {
+                if (member != null && member.gameObject == hole.Part.gameObject)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void UpdateGizmo()
         {
             if (gizmoRoot == null || selection == null || !gizmoRoot.activeSelf)
@@ -321,7 +388,7 @@ namespace VexDesigner.Parts
 
             SortRotationRings();
 
-            Vector3 centre = selection.GetCentre();
+            Vector3 centre = PivotPoint;
             gizmoRoot.transform.position = centre;
 
             gizmoRoot.transform.rotation = relativeAxes && selection.Members.Count > 0
@@ -391,7 +458,7 @@ namespace VexDesigner.Parts
             if (handle.HandleKind == TransformHandle.Kind.Move)
             {
                 lastAxisOffset = ProjectOntoAxis(pointer.AimRay, dragOrigin, dragAxis);
-                snapVirtualOffset = Vector3.Dot(dragStartCentre, dragAxis);
+                snapVirtualOffset = Vector3.Dot(PivotPoint, dragAxis);
             }
             else
             {
@@ -400,45 +467,90 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Works out which way the mouse must move to turn the ring forwards,
-        /// from the point on the ring that was grabbed.
+        /// Takes hold of the ring at the point it was grabbed.
         ///
-        /// The tangent at the grab point, projected to screen space. Grab the
-        /// top of a ring and pull right and it turns the way the ring does -
-        /// which is how a physical dial behaves, and is far more predictable
-        /// than mapping raw horizontal movement to rotation regardless of where
-        /// the ring was taken hold of.
+        /// From here the ring follows the pointer round: the part turns to
+        /// wherever the mouse is, not by however far it has moved. The old
+        /// scheme mapped movement along a screen-space tangent to an angle,
+        /// which drifted away from the cursor as the ring turned under it, and
+        /// which snapped only when a movement happened to be quick enough to
+        /// carry the running total across an increment.
+        ///
+        /// The pointer is shown for the same reason the hole dial shows it: the
+        /// view is locked during the drag, so without a visible cursor there is
+        /// nothing to say where the part is being pointed.
         /// </summary>
         private void BeginRotateDrag(Vector3 grabPoint)
         {
             rotateAccumulated = 0f;
             rotateApplied = 0f;
 
-            Camera cam = Camera.main;
-            if (cam == null)
-            {
-                rotateScreenTangent = Vector2.right;
-                return;
-            }
-
             Vector3 radial = Vector3.ProjectOnPlane(grabPoint - dragOrigin, dragAxis);
-            if (radial.sqrMagnitude < 1e-8f)
+
+            rotateStartRadial = radial.sqrMagnitude < 1e-8f
+                ? Vector3.zero
+                : radial.normalized;
+
+            // Grabbed *here*, so the part must not jump: the pointer starts on
+            // the ring at the point taken hold of, and the first reading is
+            // therefore zero.
+            pointer.ShowPointer(true);
+
+            Camera cam = Camera.main;
+            if (cam != null)
             {
-                rotateScreenTangent = Vector2.right;
-                rotateStartRadial = Vector3.zero;
-                return;
+                Vector3 screen = cam.WorldToScreenPoint(grabPoint);
+                if (screen.z > 0f)
+                {
+                    pointer.PlacePointer(new Vector2(screen.x, screen.y));
+                }
             }
 
-            rotateStartRadial = radial.normalized;
-            Vector3 tangent = Vector3.Cross(dragAxis, radial).normalized;
+            hasRotateReference = TryReadRingAngle(out rotateReferenceAngle);
+        }
 
-            Vector3 screenA = cam.WorldToScreenPoint(grabPoint);
-            Vector3 screenB = cam.WorldToScreenPoint(grabPoint + (tangent * 0.05f));
-            Vector2 screenTangent = (Vector2)(screenB - screenA);
+        /// <summary>
+        /// The angle the pointer is at around the ring being dragged.
+        ///
+        /// Read by crossing the pointer's ray with the ring's own plane, so the
+        /// part tracks the cursor around the ring as it appears on screen
+        /// rather than around a flat circle that only agrees with it head-on.
+        /// </summary>
+        private bool TryReadRingAngle(out float angle)
+        {
+            angle = 0f;
 
-            rotateScreenTangent = screenTangent.sqrMagnitude > 1e-6f
-                ? screenTangent.normalized
-                : Vector2.right;
+            if (rotateStartRadial == Vector3.zero)
+            {
+                return false;
+            }
+
+            Ray ray = pointer.PointerRay;
+            float facing = Vector3.Dot(ray.direction, dragAxis);
+
+            // Edge-on to the ring: the crossing point runs off to infinity and
+            // the angle it implies is noise.
+            if (Mathf.Abs(facing) < 0.08f)
+            {
+                return false;
+            }
+
+            float distance = Vector3.Dot(dragOrigin - ray.origin, dragAxis) / facing;
+            if (distance <= 0f)
+            {
+                return false;
+            }
+
+            Vector3 radial = Vector3.ProjectOnPlane(
+                ray.origin + (ray.direction * distance) - dragOrigin, dragAxis);
+
+            if (radial.sqrMagnitude < 1e-10f)
+            {
+                return false;
+            }
+
+            angle = Vector3.SignedAngle(rotateStartRadial, radial, dragAxis);
+            return true;
         }
 
         private void ContinueDrag()
@@ -482,27 +594,26 @@ namespace VexDesigner.Parts
             }
             else
             {
-                // Rotation reads the mouse directly rather than the aim ray,
-                // because the view is locked while turning - a frozen view
-                // means a frozen ray, which would report no movement at all.
-                float along = Vector2.Dot(pointer.DragDelta, rotateScreenTangent);
-                float angle = along * 0.35f * PrecisionFactor;
-
-                if (actions.SnapHeld)
+                // Where the pointer is around the ring, measured from where it
+                // was grabbed - so the part sits under the cursor rather than
+                // trailing it by however much movement has been missed.
+                if (!hasRotateReference || !TryReadRingAngle(out float pointerAngle))
                 {
-                    // Snap the running total, then apply only the difference.
-                    // Snapping each frame's increment instead would quantise a
-                    // slow drag to zero and never move at all.
-                    float before = Mathf.Round(rotateAccumulated / rotationSnapDegrees);
-                    rotateAccumulated += angle;
-                    float after = Mathf.Round(rotateAccumulated / rotationSnapDegrees);
+                    return;
+                }
 
-                    angle = (after - before) * rotationSnapDegrees;
-                }
-                else
-                {
-                    rotateAccumulated += angle;
-                }
+                // Unwrapped, so a drag past the far side of the ring keeps
+                // going instead of flipping to the short way round.
+                float turned = rotateAccumulated +
+                    Mathf.DeltaAngle(rotateAccumulated, pointerAngle - rotateReferenceAngle);
+
+                rotateAccumulated = turned;
+
+                float wanted = actions.SnapHeld
+                    ? Mathf.Round(turned / rotationSnapDegrees) * rotationSnapDegrees
+                    : turned;
+
+                float angle = wanted - rotateApplied;
 
                 if (Mathf.Approximately(angle, 0f))
                 {
@@ -553,6 +664,9 @@ namespace VexDesigner.Parts
 
         private void EndDrag()
         {
+            pointer?.ShowPointer(false);
+            hasRotateReference = false;
+
             if (hovered != null)
             {
                 hovered.SetHighlighted(false);
@@ -607,7 +721,7 @@ namespace VexDesigner.Parts
             snapVirtualOffset += rawDelta;
 
             float snapped = Mathf.Round(snapVirtualOffset / step) * step;
-            float current = Vector3.Dot(selection.GetCentre(), dragAxis);
+            float current = Vector3.Dot(PivotPoint, dragAxis);
 
             return snapped - current;
         }

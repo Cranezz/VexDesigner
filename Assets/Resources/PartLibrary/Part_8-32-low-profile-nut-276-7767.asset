@@ -10,33 +10,43 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4ebab36757febfb40827258d9d0a0ca3, type: 3}
-  m_Name: Part_8-32-x-3_8-star-drive-screw-276-4991
+  m_Name: Part_8-32-low-profile-nut-276-7767
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
   saving:
-    id: 276-4991
+    id: 276-7767
     legacyIds: []
   data:
-    partName: '#8-32 x 3/8" Star Drive Screw'
-    data1: 3/8"
-    data2: Star Drive
-    weightGrams: 0.6
-    hasHoles: 0
+    partName: '#8-32 Low Profile Nut'
+    data1: Low Profile
+    data2: '#8-32, 1/4" across flats'
+    weightGrams: 1.3
+    hasHoles: 1
     cuttable: 0
     material: 1
     partClass: 0
-    subClass: 30
-  mesh: {fileID: -2432090755550338912, guid: 04b29d1a62bd15444b4f730a466bbfea, type: 3}
+    subClass: 31
+  mesh: {fileID: -2432090755550338912, guid: c6c9a0a42592c344f996da12f7024764, type: 3}
   holePitchInches: 0.5
   fastener:
-    localAxis: {x: -0, y: -1, z: -0}
+    localAxis: {x: 0, y: 1, z: 0}
     localSeatPoint: {x: 0, y: 0, z: 0}
-    shankLengthInches: 0.375
-    headHeightInches: 0.08700001
-    thicknessInches: 0
+    shankLengthInches: 0
+    headHeightInches: 0
+    thicknessInches: 0.1875
   holeSet:
-    holes: []
+    holes:
+    - front:
+        localPosition: {x: 0, y: 0.00238125, z: 0}
+        localNormal: {x: 0, y: 1, z: 0}
+        width: 0.003661663
+      back:
+        localPosition: {x: 0, y: -0.00238125, z: 0}
+        localNormal: {x: -0, y: -1, z: -0}
+        width: 0.003661663
+      depth: 0.0047625
+      type: 1
     measuredPitchInches: 0
-    generatedAt: 
+    generatedAt: 2026-08-13 22:26
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85

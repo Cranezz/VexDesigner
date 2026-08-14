@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ebab36757febfb40827258d9d0a0ca3, type: 3}
+  m_Name: Part_8-32-nylock-nut-275-1027
+  m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
+  saving:
+    id: 275-1027
+    legacyIds: []
+  data:
+    partName: '#8-32 Nylock Nut'
+    data1: Nylock
+    data2: '#8-32, 11/32" across flats'
+    weightGrams: 1.8
+    hasHoles: 1
+    cuttable: 0
+    material: 1
+    partClass: 0
+    subClass: 31
+  mesh: {fileID: -2432090755550338912, guid: 3f90f918663c4854ea2508d55e5e5df7, type: 3}
+  holePitchInches: 0.5
+  fastener:
+    localAxis: {x: 0, y: 1, z: 0}
+    localSeatPoint: {x: 0, y: 0.0024476177, z: 0}
+    shankLengthInches: 0
+    headHeightInches: 0
+    thicknessInches: 0.1927258
+  holeSet:
+    holes:
+    - front:
+        localPosition: {x: 0, y: 0.0048952354, z: 0}
+        localNormal: {x: 0, y: 1, z: 0}
+        width: 0.0035943538
+      back:
+        localPosition: {x: 0, y: 0, z: 0}
+        localNormal: {x: -0, y: -1, z: -0}
+        width: 0.0035943538
+      depth: 0.0048952354
+      type: 1
+    measuredPitchInches: 0
+    generatedAt: 2026-08-13 22:26
+  colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
+  smoothness: 0.55
+  metallic: 0.85
+  frictionOverride: -1
+  centreOfMassOverride: {x: 0, y: 0, z: 0}
+  notes: 

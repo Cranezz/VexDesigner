@@ -16,9 +16,9 @@ MonoBehaviour:
     id: 276-4993
     legacyIds: []
   data:
-    partName: 8 32 x 5/8 star drive screw 276 4993
-    data1: 
-    data2: 
+    partName: '#8-32 x 5/8" Star Drive Screw'
+    data1: 5/8"
+    data2: Star Drive
     weightGrams: 0.8
     hasHoles: 0
     cuttable: 0
@@ -27,6 +27,12 @@ MonoBehaviour:
     subClass: 30
   mesh: {fileID: -2432090755550338912, guid: e2fe51a11298b41499f73945bb764df1, type: 3}
   holePitchInches: 0.5
+  fastener:
+    localAxis: {x: -0, y: -1, z: -0}
+    localSeatPoint: {x: 0, y: -4.656613e-10, z: 0}
+    shankLengthInches: 0.625
+    headHeightInches: 0.08700001
+    thicknessInches: 0
   holeSet:
     holes: []
     measuredPitchInches: 0

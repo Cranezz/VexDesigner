@@ -68,6 +68,45 @@ namespace VexDesigner.Parts
     }
 
     /// <summary>
+    /// The measurements a fastener needs to be fitted, rather than merely drawn.
+    ///
+    /// Kept apart from the mesh because none of it can be read off the mesh
+    /// reliably. Which end of a screw is the head, how far the thread reaches,
+    /// how much shank a nut consumes - a bounding box knows none of that, and
+    /// guessing it per frame from geometry would be both slow and wrong.
+    ///
+    /// Empty for everything that is not a screw or a nut.
+    /// </summary>
+    [Serializable]
+    public sealed class FastenerData
+    {
+        [Tooltip("Direction the shank runs, in local space, pointing from the " +
+                 "head toward the tip. Baked from the mesh.")]
+        public Vector3 localAxis = Vector3.forward;
+
+        [Tooltip("Point on the outer face of the head, in local space. This is " +
+                 "what lands on the surface a screw is driven into.\n\n" +
+                 "For a nut, the face that seats against material.")]
+        public Vector3 localSeatPoint = Vector3.zero;
+
+        [Tooltip("Usable length under the head, in inches - the VEX catalogue " +
+                 "figure. How much material a screw can pass through.")]
+        public float shankLengthInches;
+
+        [Tooltip("Height of the head above the surface, in inches. Baked as " +
+                 "whatever the mesh is longer than the catalogue length.")]
+        public float headHeightInches;
+
+        [Tooltip("How much shank a nut takes up, in inches. 11/32 for standard " +
+                 "nuts, 1/4 for low profile.")]
+        public float thicknessInches;
+
+        public bool IsScrew => shankLengthInches > 0f;
+
+        public bool IsNut => thicknessInches > 0f;
+    }
+
+    /// <summary>
     /// The catalogue entry for one VEX part: everything true of the part type,
     /// independent of any copy of it sitting on the bench.
     ///
@@ -101,6 +140,10 @@ namespace VexDesigner.Parts
         [Tooltip("Spacing between hole centres in inches. 0.5 for standard " +
                  "VEX structure.")]
         public float holePitchInches = 0.5f;
+
+        [Header("Fastener (generated — do not hand-edit)")]
+        [Tooltip("Screw and nut measurements. Empty for everything else.")]
+        public FastenerData fastener = new FastenerData();
 
         [Header("Holes (generated — do not hand-edit)")]
         [Tooltip("Detected screw holes, computed in the editor and saved.\n\n" +
@@ -148,6 +191,16 @@ namespace VexDesigner.Parts
         public bool hasHolePattern => data.hasHoles;
 
         public float MassGrams => data.weightGrams;
+
+        public bool IsScrew => data.subClass == PartSubClass.Screw;
+
+        public bool IsNut => data.subClass == PartSubClass.Nut;
+
+        /// <summary>Usable shank length in metres, for screws.</summary>
+        public float ShankLengthMetres => fastener.shankLengthInches * 0.0254f;
+
+        /// <summary>How much shank a nut consumes, in metres.</summary>
+        public float NutThicknessMetres => fastener.thicknessInches * 0.0254f;
 
         /// <summary>Mass in the kilograms Unity's physics expects.</summary>
         public float MassKilograms => Mathf.Max(0.0005f, data.weightGrams / 1000f);

@@ -13,12 +13,13 @@ MonoBehaviour:
   m_Name: Part_8-32-x-7_8-star-drive-screw-276-4995
   m_EditorClassIdentifier: Assembly-CSharp::VexDesigner.Parts.PartDefinition
   saving:
-    id: SCRW-0.875
-    legacyIds: []
+    id: 276-4995
+    legacyIds:
+    - SCRW-0.875
   data:
-    partName: Screw 7/8
-    data1: 
-    data2: 
+    partName: '#8-32 x 7/8" Star Drive Screw'
+    data1: 7/8"
+    data2: Star Drive
     weightGrams: 1
     hasHoles: 0
     cuttable: 0
@@ -27,6 +28,12 @@ MonoBehaviour:
     subClass: 30
   mesh: {fileID: -2432090755550338912, guid: 0beb6f05963d3fe47a361d0c6f4f7186, type: 3}
   holePitchInches: 0.5
+  fastener:
+    localAxis: {x: -0, y: -1, z: -0}
+    localSeatPoint: {x: 0, y: -0.0000000027939677, z: 0}
+    shankLengthInches: 0.875
+    headHeightInches: 0.08700007
+    thicknessInches: 0
   holeSet:
     holes: []
     measuredPitchInches: 0

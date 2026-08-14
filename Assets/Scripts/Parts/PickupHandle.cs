@@ -60,7 +60,19 @@ namespace VexDesigner.Parts
             if (tool != null && tool.IsActive)
             {
                 var instance = GetComponent<PartInstance>();
-                tool.Select(instance != null ? instance.Group : null);
+
+                // A hole under the crosshair becomes the gizmo's pivot. It is
+                // still only a selection - the tool never grabs - but the point
+                // the user actually pointed at is a far better place to work
+                // from than the middle of the part.
+                HoleHit hole = controller.AimedHole;
+                bool onThisPart = hole.IsValid && hole.Part != null &&
+                                  hole.Part.gameObject == gameObject;
+
+                tool.Select(
+                    instance != null ? instance.Group : null,
+                    onThisPart ? hole : default);
+
                 return;
             }
 

@@ -26,7 +26,14 @@ namespace VexDesigner.Parts
         /// </summary>
         [SerializeField] private float aimToleranceFraction = 0.45f;
 
+        [Tooltip("How far short of the hole the line-of-sight test stops, in " +
+                 "metres. Enough to clear the rim of the opening it is aiming " +
+                 "at, far less than the thinnest VEX wall.")]
+        [SerializeField] private float occlusionSkin = 0.0004f;
+
         private PartDefinition definition;
+        private MeshRayTester tester;
+        private bool testerResolved;
 
         public HoleSet Holes => definition == null ? null : definition.holeSet;
 
@@ -124,6 +131,13 @@ namespace VexDesigner.Parts
                 return true;
             }
 
+            // Checked last, because it is the only expensive part of this test
+            // and by here almost everything has already been ruled out.
+            if (IsBehindMaterial(worldPosition, ray))
+            {
+                return false;
+            }
+
             bestDistance = along;
             found = true;
 
@@ -138,6 +152,53 @@ namespace VexDesigner.Parts
             };
 
             return true;
+        }
+
+        /// <summary>
+        /// True when the part's own metal stands between the viewer and this
+        /// opening.
+        ///
+        /// Without this a hole could be picked straight through the part it is
+        /// in. A C-channel is the clear case: looked at from the side, the far
+        /// flange's inside faces point back at the viewer and pass every other
+        /// test, so aiming at solid metal on the near flange would select a
+        /// hole two inches behind it.
+        ///
+        /// Note this is about *other* material, not the hole's own far face:
+        /// reaching the opposite side of the same hole is deliberate, and is
+        /// what the far-side key does.
+        /// </summary>
+        private bool IsBehindMaterial(Vector3 worldPosition, Ray ray)
+        {
+            MeshRayTester tester = Tester();
+
+            if (tester == null)
+            {
+                // No readable mesh to consult. Allowing the pick is the right
+                // failure: an over-permissive aim is a nuisance, whereas
+                // rejecting everything would make the part unusable.
+                return false;
+            }
+
+            Vector3 localTarget = transform.InverseTransformPoint(worldPosition);
+            Vector3 localOrigin = transform.InverseTransformPoint(ray.origin);
+
+            // The skin has to clear the rim of the hole being aimed at, which
+            // sits exactly on the surface the test ends at. A hair under half a
+            // millimetre: wide enough to miss the rim, far short of the
+            // thinnest VEX wall.
+            return tester.SegmentBlocked(localOrigin, localTarget, occlusionSkin);
+        }
+
+        private MeshRayTester Tester()
+        {
+            if (!testerResolved)
+            {
+                testerResolved = true;
+                tester = MeshRayTester.For(definition == null ? null : definition.mesh);
+            }
+
+            return tester;
         }
 
         private HoleHit Flip(HoleHit hit)

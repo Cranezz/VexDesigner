@@ -16,9 +16,9 @@ MonoBehaviour:
     id: 276-4997
     legacyIds: []
   data:
-    partName: 8 32 x 1.250 star drive screw 276 4997
-    data1: 
-    data2: 
+    partName: '#8-32 x 1-1/4" Star Drive Screw'
+    data1: 1-1/4"
+    data2: Star Drive
     weightGrams: 1.4
     hasHoles: 0
     cuttable: 0
@@ -27,6 +27,12 @@ MonoBehaviour:
     subClass: 30
   mesh: {fileID: -2432090755550338912, guid: 87920548cca89b646befacfc1e8f4669, type: 3}
   holePitchInches: 0.5
+  fastener:
+    localAxis: {x: -0, y: -1, z: -0}
+    localSeatPoint: {x: 0, y: -0.0000000027939677, z: 0}
+    shankLengthInches: 1.25
+    headHeightInches: 0.08700013
+    thicknessInches: 0
   holeSet:
     holes: []
     measuredPitchInches: 0

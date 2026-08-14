@@ -324,7 +324,13 @@ namespace VexDesigner.Parts
             // A hole under the crosshair takes the click. Grabbing the part by
             // that hole is what the user was pointing at; picking it up by the
             // surface is what they get anywhere else on it.
-            if (HasHoleTarget && pointer.PrimaryPressedThisFrame)
+            //
+            // Only in grab mode. The transform tool never picks anything up, so
+            // a hole there is just a place on the part - it selects, and the
+            // gizmo lands on the hole that was clicked.
+            bool transformActive = TransformTool != null && TransformTool.IsActive;
+
+            if (HasHoleTarget && !transformActive && pointer.PrimaryPressedThisFrame)
             {
                 BeginCarryByHole(aimedHole);
                 return;

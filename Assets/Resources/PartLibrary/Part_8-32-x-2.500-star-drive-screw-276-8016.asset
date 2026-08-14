@@ -16,9 +16,9 @@ MonoBehaviour:
     id: 276-8016
     legacyIds: []
   data:
-    partName: 8 32 x 2.500 star drive screw 276 8016
-    data1: 
-    data2: 
+    partName: '#8-32 x 2-1/2" Star Drive Screw'
+    data1: 2-1/2"
+    data2: Star Drive
     weightGrams: 2.4
     hasHoles: 0
     cuttable: 0
@@ -27,6 +27,12 @@ MonoBehaviour:
     subClass: 30
   mesh: {fileID: -2432090755550338912, guid: 77c19a0424243304a8e06b0add6dc702, type: 3}
   holePitchInches: 0.5
+  fastener:
+    localAxis: {x: -0, y: -1, z: -0}
+    localSeatPoint: {x: 0, y: -0.0000000037252903, z: 0}
+    shankLengthInches: 2.5
+    headHeightInches: 0.08700013
+    thicknessInches: 0
   holeSet:
     holes: []
     measuredPitchInches: 0

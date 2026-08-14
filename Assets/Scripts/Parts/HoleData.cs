@@ -29,6 +29,37 @@ namespace VexDesigner.Parts
     }
 
     /// <summary>
+    /// What a hole does when a screw goes through it.
+    ///
+    /// The distinction is what makes a robot an assembly rather than a pile of
+    /// parts touching each other. A screw dropped through a stack of C-channel
+    /// holds nothing; the same screw with a nut on the end holds everything
+    /// between them. Marking that on the *hole* rather than on the part is what
+    /// lets a nut and a threaded standoff behave identically without either
+    /// knowing about the other.
+    /// </summary>
+    public enum HoleType
+    {
+        /// <summary>
+        /// A plain opening. Says where something can be put; grips nothing.
+        /// Every hole in a C-channel or a plate is one of these.
+        /// </summary>
+        Normal,
+
+        /// <summary>
+        /// Bites on the thread. A screw reaching one of these clamps everything
+        /// between its head and this hole into a single assembly.
+        /// </summary>
+        Threaded,
+
+        /// <summary>
+        /// Grips the shaft rather than the thread - shaft collars and clamps.
+        /// Reserved: currently treated as <see cref="Normal"/>.
+        /// </summary>
+        Clamp,
+    }
+
+    /// <summary>
     /// A hole passing through a part: two faces, and the material between them.
     /// </summary>
     [Serializable]
@@ -39,6 +70,12 @@ namespace VexDesigner.Parts
 
         [Tooltip("Material thickness between the two faces, in metres.")]
         public float depth;
+
+        [Tooltip("What happens when a screw reaches this hole. See HoleType.")]
+        public HoleType type;
+
+        /// <summary>True if a screw reaching this hole forms an assembly.</summary>
+        public bool Grips => type == HoleType.Threaded;
 
         /// <summary>Centre of the hole, halfway through the material.</summary>
         public Vector3 LocalCentre => (front.localPosition + back.localPosition) * 0.5f;
