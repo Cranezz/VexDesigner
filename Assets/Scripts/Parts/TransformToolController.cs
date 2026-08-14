@@ -480,10 +480,6 @@ namespace VexDesigner.Parts
                 // eye.
                 MeasurementDisplay.Show(dragStartCentre, selection.GetCentre());
             }
-            else if (dragging.HandleKind == TransformHandle.Kind.Free)
-            {
-                FreeRotate();
-            }
             else
             {
                 // Rotation reads the mouse directly rather than the aim ray,
@@ -519,37 +515,6 @@ namespace VexDesigner.Parts
 
                 DrawRotationArc();
             }
-        }
-
-        /// <summary>
-        /// Trackball rotation: turns the part about whatever axis the drag
-        /// implies, relative to the viewer.
-        ///
-        /// Dragging sideways turns about the screen's vertical, dragging up and
-        /// down about the screen's horizontal - so the part follows the hand
-        /// the way a ball under a fingertip would. Faster than the rings for
-        /// getting a rough orientation, where choosing the right ring is more
-        /// work than the turn itself.
-        /// </summary>
-        private void FreeRotate()
-        {
-            Camera cam = Camera.main;
-            if (cam == null)
-            {
-                return;
-            }
-
-            Vector2 drag = pointer.DragDelta * (0.35f * PrecisionFactor);
-            if (drag.sqrMagnitude < 1e-6f)
-            {
-                return;
-            }
-
-            Quaternion turn =
-                Quaternion.AngleAxis(drag.x, cam.transform.up) *
-                Quaternion.AngleAxis(-drag.y, cam.transform.right);
-
-            selection.Rotate(turn, dragOrigin);
         }
 
         /// <summary>
@@ -745,11 +710,12 @@ namespace VexDesigner.Parts
             CreateMoveHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateMoveHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
 
+            CreateMoveHub();
+
             CreateRotateHandle(Vector3.right, new Color(0.95f, 0.25f, 0.25f));
             CreateRotateHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateRotateHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
 
-            CreateFreeHandle();
             BuildRotationArc();
 
             gizmoRoot.SetActive(false);
@@ -781,6 +747,32 @@ namespace VexDesigner.Parts
                 .Configure(TransformHandle.Kind.Move, axis, colour);
         }
 
+        /// <summary>
+        /// The white ball the move arrows radiate from.
+        ///
+        /// Purely a marker: it shows exactly which point is being moved, which
+        /// three arrows meeting in mid-air only imply. Deliberately given no
+        /// collider - a handle here would sit right where the part is and
+        /// swallow clicks meant for it, which is the same mistake the arrows
+        /// themselves once made by running through the origin.
+        /// </summary>
+        private void CreateMoveHub()
+        {
+            var hub = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            hub.name = "Move_Hub";
+            hub.transform.SetParent(moveHandles, false);
+            hub.transform.localScale = Vector3.one * 0.12f;
+            Object.Destroy(hub.GetComponent<Collider>());
+
+            var material = new Material(handleMaterial) { name = "GizmoHub" };
+            material.SetColor("_BaseColor", new Color(0.96f, 0.96f, 0.97f));
+
+            var renderer = hub.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+
         private void CreateRotateHandle(Vector3 axis, Color colour)
         {
             var root = new GameObject($"Rotate_{axis}");
@@ -797,7 +789,14 @@ namespace VexDesigner.Parts
             AddPiece(root.transform, GizmoMeshes.Torus(),
                 Vector3.zero, Vector3.one * radius, colour, ringMaterial);
 
-            AddTickMarks(root.transform, radius, colour, ringMaterial);
+            // Graduations, in the ring's own colour so they read as part of it.
+            // Black marks looked like damage to the ring rather than like
+            // markings on it.
+            var tickMaterial = new Material(ringMaterial) { name = $"Ticks_{axis}" };
+            tickMaterial.SetColor("_BaseColor", colour * 1.25f);
+
+            AddPiece(root.transform, GizmoMeshes.RingTicks(),
+                Vector3.zero, Vector3.one * radius, colour, tickMaterial);
 
             // Boxes around the ring, not a convex mesh collider.
             //
@@ -824,55 +823,6 @@ namespace VexDesigner.Parts
                 .Configure(TransformHandle.Kind.Rotate, axis, colour);
         }
 
-        /// <summary>
-        /// The free-rotation ball: a faint sphere filling the rings, dragged
-        /// to turn the part about any axis at once.
-        ///
-        /// Sized just inside the rings so it never steals a click meant for
-        /// one of them - the rings are the precise tool and must stay
-        /// reachable, with the ball as the coarse fallback in the middle.
-        /// </summary>
-        private void CreateFreeHandle()
-        {
-            const float radius = 0.68f;
-
-            var root = new GameObject("Rotate_Free");
-            root.transform.SetParent(rotateHandles, false);
-
-            var visual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            visual.name = "Ball";
-            visual.transform.SetParent(root.transform, false);
-
-            // Unity's sphere primitive is one unit across, so its radius is a
-            // half - hence the doubling.
-            visual.transform.localScale = Vector3.one * (radius * 2f);
-            Object.Destroy(visual.GetComponent<Collider>());
-
-            Shader shader = Shader.Find("VexDesigner/GizmoTransparent");
-            if (shader != null)
-            {
-                var mat = new Material(shader) { name = "GizmoBall" };
-                mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.10f));
-
-                var renderer = visual.GetComponent<MeshRenderer>();
-                renderer.sharedMaterial = mat;
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-            }
-
-            var collider = root.AddComponent<SphereCollider>();
-            collider.radius = radius;
-            collider.isTrigger = true;
-
-            root.AddComponent<TransformHandle>()
-                .Configure(TransformHandle.Kind.Free, Vector3.up, new Color(1f, 1f, 1f, 0.1f));
-        }
-
-        /// <summary>
-        /// The arc drawn over the ring being turned, showing how far the part
-        /// has come. Lives outside the gizmo hierarchy so it can be drawn in
-        /// world space without inheriting the gizmo's screen-size scaling.
-        /// </summary>
         private void BuildRotationArc()
         {
             var go = new GameObject("RotationArc");
@@ -1007,56 +957,6 @@ namespace VexDesigner.Parts
             for (int i = 0; i < ranked.Count; i++)
             {
                 ranked[i].material.renderQueue = 4000 + i;
-            }
-        }
-
-        /// <summary>
-        /// Ticks every 15 degrees around a ring, so a rotation can be judged
-        /// against fixed marks rather than by eye - and so the snapping
-        /// increment is visible before it is used.
-        /// </summary>
-        private void AddTickMarks(Transform parent, float radius, Color colour, Material material)
-        {
-            const int ticks = 24;   // 360 / 15
-
-            for (int i = 0; i < ticks; i++)
-            {
-                float angle = (i / (float)ticks) * Mathf.PI * 2f;
-                Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-
-                bool major = i % 6 == 0;
-                float length = major ? 0.075f : 0.045f;
-
-                var tick = new GameObject($"Tick_{i * 15}");
-                tick.transform.SetParent(parent, false);
-
-                // Ticks point *inward along the radius*, not upward.
-                //
-                // The first version rotated about Y only, which left every tick
-                // pointing along the ring's own axis - so they stuck out
-                // sideways and looked scattered rather than reading as marks on
-                // a dial.
-                tick.transform.localRotation =
-                    Quaternion.FromToRotation(Vector3.up, -outward);
-
-                // The shaft mesh runs 0..1 from its origin, so placing the
-                // origin on the ring grows the tick inward from there.
-                tick.transform.localPosition = outward * radius;
-                tick.transform.localScale = new Vector3(0.014f, length, 0.014f);
-
-                tick.AddComponent<MeshFilter>().sharedMesh = GizmoMeshes.Shaft();
-
-                var renderer = tick.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = material;
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-
-                // Black, so they read as graduations on the ring rather than as
-                // more of the ring. Quadrant marks are longer, not lighter.
-                var block = new MaterialPropertyBlock();
-                block.SetColor(Shader.PropertyToID("_BaseColor"),
-                    new Color(0.04f, 0.04f, 0.05f));
-                renderer.SetPropertyBlock(block);
             }
         }
 

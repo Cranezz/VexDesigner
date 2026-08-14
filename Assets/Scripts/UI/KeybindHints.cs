@@ -93,9 +93,10 @@ namespace VexDesigner.UI
                 // once would be worse than listing none.
                 if (placement.IsRotatingAboutHole)
                 {
-                    Add("Drag", "Turn about the join");
+                    Add("Mouse", "Point to the angle");
                     Add("Shift", "Snap to 15°");
-                    Add("R", "Back to moving");
+                    Add("R", "Keep angle, back to moving");
+                    Add("RMB", "Discard angle");
                     Add("LMB", "Place");
                 }
                 else if (placement.HoleIsSnapped)
@@ -103,6 +104,7 @@ namespace VexDesigner.UI
                     Add("LMB", "Place here");
                     Add("R", "Rotate about the join");
                     Add("Space", "Hold for far side");
+                    Add("K", placement.CarriedIsFrozen ? "Unfreeze" : "Freeze in air");
                     Add("RMB", "Cancel");
                 }
                 else
@@ -110,6 +112,7 @@ namespace VexDesigner.UI
                     Add("LMB", "Drop here");
                     Add("Scroll", "Distance");
                     Add("Space", "Hold for far side");
+                    Add("K", placement.CarriedIsFrozen ? "Unfreeze" : "Freeze in air");
                     Add("RMB", "Cancel");
                 }
             }

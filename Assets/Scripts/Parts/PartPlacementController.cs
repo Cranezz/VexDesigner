@@ -134,6 +134,9 @@ namespace VexDesigner.Parts
         /// <summary>Manual roll about the join, in degrees, on top of the snap.</summary>
         private float holeRoll;
 
+        /// <summary>Roll before the dial went up, so a cancel can restore it.</summary>
+        private float rollBeforeRotating;
+
         private Vector3 ringZeroDirection;
         private PartGhost ghost;
         private HoleRotationRing rotationRing;
@@ -458,8 +461,6 @@ namespace VexDesigner.Parts
 
             ghost = go.GetComponent<PartGhost>() ?? go.AddComponent<PartGhost>();
             ghost.SetGhosted(true);
-
-            MessageBanner.Info("Hold a hole against another to join — R for rotation");
         }
 
         private void UpdateHoleCarry()
@@ -470,6 +471,15 @@ namespace VexDesigner.Parts
             interactionLock.CameraOrbitLocked = rotatingAboutHole;
 
             TurnFreeOrientationWithBody();
+
+            // Freezing has to stay reachable here. Holding a part by a hole is
+            // not a different kind of holding, and a pinned part the user has
+            // picked up must still be releasable without first putting it down
+            // somewhere to get at the key.
+            if (actions != null && actions.FreezePressed)
+            {
+                ToggleFreezeCarried();
+            }
 
             if (actions != null && actions.RotateModifierPressed)
             {
@@ -488,12 +498,22 @@ namespace VexDesigner.Parts
 
             ApplyHolePose();
 
-            // Right-click backs out. Without it a part grabbed by the wrong
-            // hole could only be got rid of by putting it somewhere, and the
-            // pose it was grabbed from would be gone.
             if (pointer.SecondaryPressedThisFrame)
             {
-                EndHoleCarry(commit: false);
+                // Right-click undoes one step, not everything. With the dial up
+                // that step is the rotation; otherwise it is the grab itself,
+                // which without this could only be escaped by putting the part
+                // down somewhere and losing where it came from.
+                if (rotatingAboutHole)
+                {
+                    holeRoll = rollBeforeRotating;
+                    StopHoleRotation();
+                }
+                else
+                {
+                    EndHoleCarry(commit: false);
+                }
+
                 return;
             }
 
@@ -639,6 +659,15 @@ namespace VexDesigner.Parts
             }
 
             rotatingAboutHole = true;
+            rollBeforeRotating = holeRoll;
+
+            // The pointer takes the mouse over, and starts on the dial at the
+            // angle already set. Starting it in the middle of the screen would
+            // yank the part round to whatever angle that happened to be, which
+            // is a jump nobody asked for.
+            pointer.ShowPointer(true);
+            PlacePointerOnDial();
+
             MessageBanner.Info(
                 $"Rotating about the join — hold Shift for {holeRollSnapDegrees:0}°");
         }
@@ -648,23 +677,92 @@ namespace VexDesigner.Parts
             rotatingAboutHole = false;
             rotationRing?.Hide();
             interactionLock.CameraOrbitLocked = false;
+            pointer?.ShowPointer(false);
         }
 
-        private void UpdateHoleRoll()
+        /// <summary>Puts the pointer on the dial where the needle already is.</summary>
+        private void PlacePointerOnDial()
         {
-            float rate = rotationDegreesPerPixel * PrecisionFactor;
-
-            // Horizontal drag only. The dial has one degree of freedom, and
-            // feeding vertical movement into it as well makes the angle jump
-            // about while the hand is merely unsteady.
-            holeRoll += pointer.DragDelta.x * rate;
-
-            if (actions != null && actions.SnapHeld && holeRollSnapDegrees > 0f)
+            Camera cam = Camera.main;
+            if (cam == null || !snapTarget.IsValid)
             {
-                holeRoll = Mathf.Round(holeRoll / holeRollSnapDegrees) * holeRollSnapDegrees;
+                return;
             }
 
-            holeRoll = Mathf.Repeat(holeRoll, 360f);
+            Vector3 radial = Quaternion.AngleAxis(holeRoll, snapTarget.WorldNormal)
+                * ringZeroDirection.normalized;
+
+            Vector3 world = snapTarget.WorldPosition + (radial * HoleRotationRing.RadiusMetres);
+            Vector3 screen = cam.WorldToScreenPoint(world);
+
+            if (screen.z > 0f)
+            {
+                pointer.PlacePointer(new Vector2(screen.x, screen.y));
+            }
+        }
+
+        /// <summary>
+        /// Points the part at the pointer.
+        ///
+        /// The angle is read from where the pointer *is*, not accumulated from
+        /// how far the mouse moved. Accumulating made the result depend on the
+        /// path the hand took rather than on where it ended up, so the same
+        /// screen position gave a different angle every time - and snapping,
+        /// which rounds the running total, only bit when a fast movement
+        /// happened to carry it over a boundary.
+        ///
+        /// Read by crossing the pointer's ray with the mating plane, so the
+        /// part tracks the pointer around the dial as drawn rather than around
+        /// a flat circle that only agrees with it when viewed head-on.
+        /// </summary>
+        private void UpdateHoleRoll()
+        {
+            // No zero mark means nothing to measure from, and SignedAngle
+            // against a zero vector returns NaN straight into the transform.
+            if (ringZeroDirection.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            Vector3 axis = snapTarget.WorldNormal;
+            Vector3 centre = snapTarget.WorldPosition;
+            Ray ray = pointer.PointerRay;
+
+            float facing = Vector3.Dot(ray.direction, axis);
+
+            // Edge-on to the dial: the crossing point runs away to infinity and
+            // the angle it implies is noise, so the last good one stands.
+            if (Mathf.Abs(facing) < 0.08f)
+            {
+                return;
+            }
+
+            float distance = Vector3.Dot(centre - ray.origin, axis) / facing;
+            if (distance <= 0f)
+            {
+                return;
+            }
+
+            Vector3 radial = Vector3.ProjectOnPlane(
+                ray.origin + (ray.direction * distance) - centre, axis);
+
+            // Pointer dead on the centre, where every angle is equally true.
+            if (radial.sqrMagnitude < 1e-8f)
+            {
+                return;
+            }
+
+            float angle = Vector3.SignedAngle(ringZeroDirection, radial, axis);
+
+            // Zero is the square-on position, so rounding from here lands on
+            // exact alignment with the other part at every quarter turn - which
+            // is the point of snapping to the part rather than to the world.
+            if (actions != null && actions.SnapHeld && holeRollSnapDegrees > 0f)
+            {
+                angle = Mathf.Round(angle / holeRollSnapDegrees) * holeRollSnapDegrees;
+            }
+
+            holeRoll = Mathf.Repeat(angle, 360f);
         }
 
         private void UpdateRotationRing()
@@ -722,11 +820,6 @@ namespace VexDesigner.Parts
             carriedHoles = null;
             carriedHole = default;
             holeRoll = 0f;
-
-            if (mated)
-            {
-                MessageBanner.Info("Placed — not joined until a screw goes through");
-            }
         }
 
         /// <summary>

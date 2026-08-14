@@ -5,10 +5,16 @@ namespace VexDesigner.UI
     using VexDesigner.Parts;
 
     /// <summary>
-    /// The aiming dot, which becomes a hand when something can be interacted
-    /// with.
+    /// The aiming dot, and the free pointer that replaces it during a dial
+    /// gesture.
     ///
-    /// Both sprites are generated in code. A crosshair is a handful of pixels,
+    /// The dot never changes shape, only colour. It used to swap to a hand
+    /// glyph over anything grabbable, and a 34-pixel hand centred on the aim
+    /// point covers the very thing being aimed at - which matters here more
+    /// than in most games, because the targets are quarter-inch holes half an
+    /// inch apart. Recolouring says the same thing and occludes nothing.
+    ///
+    /// Every sprite is generated in code. A crosshair is a handful of pixels,
     /// and generating it avoids an import step, keeps it crisp at any
     /// resolution setting, and means there is no art dependency for a purely
     /// functional element.
@@ -16,14 +22,24 @@ namespace VexDesigner.UI
     public sealed class Crosshair : MonoBehaviour
     {
         [SerializeField] private Image dot;
-        [SerializeField] private Image hand;
         [SerializeField] private Image padlock;
+        [SerializeField] private Image pointer;
         [SerializeField] private PartPlacementController placement;
         [SerializeField] private TransformToolController transformTool;
 
+        [Tooltip("Dot colour when a click would do nothing in particular.")]
+        [SerializeField] private Color idleColour = new Color(1f, 1f, 1f, 0.85f);
+
+        [Tooltip("Dot colour when a click would take hold of something, or " +
+                 "put down what is already held.")]
+        [SerializeField] private Color grabColour = new Color(1f, 0.28f, 0.24f);
+
         private static Sprite dotSprite;
-        private static Sprite handSprite;
         private static Sprite padlockSprite;
+        private static Sprite pointerSprite;
+
+        private RectTransform pointerRect;
+        private VexDesigner.InputSources.IPointerInput pointerInput;
 
         private void Awake()
         {
@@ -36,6 +52,13 @@ namespace VexDesigner.UI
             {
                 transformTool = FindAnyObjectByType<TransformToolController>();
             }
+
+            pointerInput = FindAnyObjectByType<VexDesigner.InputSources.FirstPersonInput>();
+
+            if (pointer != null)
+            {
+                pointerRect = pointer.rectTransform;
+            }
         }
 
         private void Update()
@@ -45,31 +68,71 @@ namespace VexDesigner.UI
                 return;
             }
 
-            // Three states, in priority order. The padlock wins because
-            // "you are holding something that will not move" is the single
-            // most useful thing to know at that moment.
-            // Hidden entirely while turning a gizmo ring: the view is locked
-            // and the mouse is driving the rotation, so a crosshair pointing
-            // at nothing in particular is just noise over the part.
-            if (transformTool != null && transformTool.IsRotating)
+            UpdatePointer();
+
+            // Hidden entirely while turning a gizmo ring or a hole dial: the
+            // view is locked and the mouse is driving the rotation, so a
+            // crosshair fixed to the middle of the screen points at nothing and
+            // is only noise over the part.
+            bool dialUp = (transformTool != null && transformTool.IsRotating) ||
+                          placement.IsRotatingAboutHole;
+
+            if (dialUp)
             {
                 if (dot != null) { dot.enabled = false; }
-                if (hand != null) { hand.enabled = false; }
                 if (padlock != null) { padlock.enabled = false; }
                 return;
             }
 
-            bool holdingFrozen = placement.IsCarrying && placement.CarriedIsFrozen;
-
             // HasGrabTarget, not HasTarget: in transform mode, clicking a
-            // placed part selects it rather than picking it up, and showing a
-            // hand there would promise something the click does not do.
-            bool interactive = !holdingFrozen &&
-                (placement.HasGrabTarget || placement.IsCarrying);
+            // placed part selects it rather than picking it up, and colouring
+            // the dot there would promise something the click does not do.
+            bool interactive = placement.HasGrabTarget || placement.IsCarrying;
 
-            if (dot != null) { dot.enabled = !interactive && !holdingFrozen; }
-            if (hand != null) { hand.enabled = interactive; }
-            if (padlock != null) { padlock.enabled = holdingFrozen; }
+            if (dot != null)
+            {
+                dot.enabled = true;
+                dot.color = interactive ? grabColour : idleColour;
+            }
+
+            // The padlock is a badge under the dot rather than a replacement
+            // for it. Swapping the crosshair out lost the aim point at exactly
+            // the moment a pinned part was being lined up.
+            if (padlock != null)
+            {
+                padlock.enabled = placement.IsCarrying && placement.CarriedIsFrozen;
+            }
+        }
+
+        /// <summary>
+        /// Draws the free pointer where the input layer says it is.
+        ///
+        /// Drawn in the HUD rather than handed to the operating system, so it
+        /// cannot wander out of the window in the middle of a gesture.
+        /// </summary>
+        private void UpdatePointer()
+        {
+            if (pointer == null || pointerInput == null)
+            {
+                return;
+            }
+
+            bool visible = pointerInput.PointerVisible;
+            pointer.enabled = visible;
+
+            if (!visible || pointerRect == null)
+            {
+                return;
+            }
+
+            Vector2 screen = pointerInput.PointerScreenPosition;
+            var canvas = pointerRect.parent as RectTransform;
+
+            if (canvas != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvas, screen, null, out Vector2 local))
+            {
+                pointerRect.anchoredPosition = local;
+            }
         }
 
         // ------------------------------------------------------------------
@@ -109,67 +172,61 @@ namespace VexDesigner.UI
             return dotSprite;
         }
 
-        public static Sprite GetHandSprite()
+        /// <summary>
+        /// The free pointer: an arrow, so it reads as a cursor rather than as
+        /// a second crosshair. Its tip is the hot spot, and the sprite pivot is
+        /// set to match when it is built into the HUD.
+        /// </summary>
+        public static Sprite GetPointerSprite()
         {
-            if (handSprite != null)
+            if (pointerSprite != null)
             {
-                return handSprite;
+                return pointerSprite;
             }
 
-            // A blocky pointing-hand glyph. Drawn as a bitmap because at 32px
-            // it is more legible hand-placed than any procedural curve.
             string[] rows =
             {
-                "................................",
-                "................................",
-                "..............XX................",
-                ".............X..X...............",
-                ".............X..X...............",
-                ".............X..X...............",
-                ".............X..X.XX............",
-                ".............X..X.X.X...........",
-                ".............X..X.X.X.XX........",
-                ".............X..X.X.X.X.X.......",
-                "....XX.......X..X.X.X.X.X.......",
-                "...X..X......X..............X...",
-                "...X...X.....................X..",
-                "....X...X....................X..",
-                ".....X...X...................X..",
-                "......X...X..................X..",
-                ".......X.....................X..",
-                "........X....................X..",
-                ".........X..................X...",
-                "..........X.................X...",
-                "...........X...............X....",
-                "............X.............X.....",
-                ".............X...........X......",
-                "..............XXXXXXXXXXX.......",
-                "................................",
-                "................................",
-                "................................",
-                "................................",
-                "................................",
-                "................................",
-                "................................",
-                "................................",
+                "X...............",
+                "XX..............",
+                "XOX.............",
+                "XOOX............",
+                "XOOOX...........",
+                "XOOOOX..........",
+                "XOOOOOX.........",
+                "XOOOOOOX........",
+                "XOOOOOOOX.......",
+                "XOOOOXXXXX......",
+                "XOOXOX..........",
+                "XOX.XOX.........",
+                "XX..XOX.........",
+                "X....XOX........",
+                "......XX........",
+                "................",
             };
 
-            const int size = 32;
+            const int size = 16;
             var pixels = new Color[size * size];
 
             for (int y = 0; y < size; y++)
             {
                 // Bitmap rows read top-down; texture rows read bottom-up.
                 string row = rows[size - 1 - y];
+
                 for (int x = 0; x < size; x++)
                 {
-                    bool on = x < row.Length && row[x] == 'X';
-                    pixels[(y * size) + x] = on ? Color.white : Color.clear;
+                    char c = x < row.Length ? row[x] : '.';
+
+                    // Black outline round a white body, so the pointer stays
+                    // legible over pale aluminium and dark shadow alike.
+                    pixels[(y * size) + x] =
+                        c == 'O' ? Color.white :
+                        c == 'X' ? new Color(0f, 0f, 0f, 0.85f) :
+                        Color.clear;
                 }
             }
 
-            handSprite = BuildSprite(pixels, size, "CrosshairHand");
-            return handSprite;
+            pointerSprite = BuildSprite(pixels, size, "CrosshairPointer");
+            return pointerSprite;
         }
 
         public static Sprite GetPadlockSprite()

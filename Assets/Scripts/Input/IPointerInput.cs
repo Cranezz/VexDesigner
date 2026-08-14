@@ -64,5 +64,46 @@ namespace VexDesigner.InputSources
         /// where the user is pointing.
         /// </summary>
         Vector2 DragDelta { get; }
+
+        /// <summary>
+        /// A ray through a freely-moved pointer rather than through the middle
+        /// of the view.
+        ///
+        /// Some gestures are about a place on the screen instead of a direction
+        /// the head is facing - dragging a dial round to an angle, for one.
+        /// Those need a pointer that can move independently of the view, which
+        /// on a headset is the controller and on a desktop is the mouse once it
+        /// stops steering the camera.
+        ///
+        /// Equal to <see cref="AimRay"/> unless the pointer has been shown.
+        /// </summary>
+        Ray PointerRay { get; }
+
+        /// <summary>
+        /// Where the pointer is on screen, in pixels. Used to draw it; the ray
+        /// is what world interaction should use.
+        /// </summary>
+        Vector2 PointerScreenPosition { get; }
+
+        /// <summary>True while the free pointer is being shown.</summary>
+        bool PointerVisible { get; }
+
+        /// <summary>
+        /// Shows or hides the free pointer.
+        ///
+        /// Showing it starts the pointer in the middle of the view, so it
+        /// appears where the user was already looking rather than wherever it
+        /// was left last time.
+        /// </summary>
+        void ShowPointer(bool visible);
+
+        /// <summary>
+        /// Moves the pointer to a screen position without the user moving it.
+        ///
+        /// Used to start a gesture under the thing it will control, so raising
+        /// a dial does not snap whatever it drives to wherever the pointer
+        /// happened to appear.
+        /// </summary>
+        void PlacePointer(Vector2 screenPosition);
     }
 }

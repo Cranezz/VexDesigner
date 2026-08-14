@@ -27,6 +27,13 @@ namespace VexDesigner.Parts
         /// </summary>
         private const float RadiusInches = 2.6f;
 
+        /// <summary>
+        /// The same radius in world units. Public because the pointer has to be
+        /// placed on the dial, and it can only do that if it knows how big the
+        /// dial is.
+        /// </summary>
+        public const float RadiusMetres = RadiusInches * InchesToMetres;
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         private Transform needle;

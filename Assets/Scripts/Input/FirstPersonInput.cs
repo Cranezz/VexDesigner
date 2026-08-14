@@ -42,6 +42,15 @@ namespace VexDesigner.InputSources
         public bool IsOverInterface { get; private set; }
         public Vector2 DragDelta { get; private set; }
 
+        /// <summary>Ray through the free pointer; the aim ray while it is hidden.</summary>
+        public Ray PointerRay { get; private set; }
+
+        /// <summary>Free pointer position in screen pixels.</summary>
+        public Vector2 PointerScreenPosition { get; private set; }
+
+        /// <summary>True while the free pointer is being shown.</summary>
+        public bool PointerVisible { get; private set; }
+
         /// <summary>
         /// True while the mouse is captured. Cleared when a menu opens so the
         /// cursor comes back.
@@ -237,6 +246,8 @@ namespace VexDesigner.InputSources
             // where the crosshair is - not from a cursor position.
             AimRay = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
+            MovePointer(cam, mouse);
+
             if (mouse != null)
             {
                 PrimaryPressedThisFrame = mouse.leftButton.wasPressedThisFrame && CursorLocked;
@@ -252,6 +263,67 @@ namespace VexDesigner.InputSources
 
             IsOverInterface = !CursorLocked ||
                 (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject());
+        }
+
+        /// <summary>
+        /// Moves the free pointer with the mouse, in screen pixels.
+        ///
+        /// Drawn by the game rather than handed back to the operating system.
+        /// Releasing the real cursor would let it wander out of the window
+        /// mid-gesture, and this project reads <see cref="CursorLocked"/> as
+        /// "the game has the input" - unlocking it would gate off every click
+        /// and keypress at exactly the moment they are wanted.
+        /// </summary>
+        private void MovePointer(Camera cam, Mouse mouse)
+        {
+            if (!PointerVisible)
+            {
+                PointerScreenPosition = new Vector2(Screen.width, Screen.height) * 0.5f;
+                PointerRay = AimRay;
+                return;
+            }
+
+            if (mouse != null)
+            {
+                Vector2 delta = mouse.delta.ReadValue();
+
+                // Y is inverted against the look control on purpose. Look is a
+                // head turning; this is a cursor, and a cursor that goes down
+                // when the mouse goes up is simply wrong.
+                PointerScreenPosition = new Vector2(
+                    Mathf.Clamp(PointerScreenPosition.x + delta.x, 0f, Screen.width),
+                    Mathf.Clamp(PointerScreenPosition.y + delta.y, 0f, Screen.height));
+            }
+
+            PointerRay = cam.ScreenPointToRay(PointerScreenPosition);
+        }
+
+        public void ShowPointer(bool visible)
+        {
+            if (PointerVisible == visible)
+            {
+                return;
+            }
+
+            PointerVisible = visible;
+
+            if (visible)
+            {
+                PointerScreenPosition = new Vector2(Screen.width, Screen.height) * 0.5f;
+            }
+        }
+
+        public void PlacePointer(Vector2 screenPosition)
+        {
+            PointerScreenPosition = new Vector2(
+                Mathf.Clamp(screenPosition.x, 0f, Screen.width),
+                Mathf.Clamp(screenPosition.y, 0f, Screen.height));
+
+            Camera cam = ResolveCamera();
+            if (cam != null)
+            {
+                PointerRay = cam.ScreenPointToRay(PointerScreenPosition);
+            }
         }
 
         private Camera ResolveCamera()

@@ -491,14 +491,22 @@ namespace VexDesigner.EditorTools
             GameObject dot = CreateHudImage(canvasGo.transform, "Dot", 10f);
             dot.GetComponent<Image>().sprite = Crosshair.GetDotSprite();
 
-            GameObject hand = CreateHudImage(canvasGo.transform, "Hand", 34f);
-            hand.GetComponent<Image>().sprite = Crosshair.GetHandSprite();
-            hand.GetComponent<Image>().enabled = false;
-
-            GameObject padlock = CreateHudImage(canvasGo.transform, "Padlock", 30f);
+            // A badge below the aim point, not a replacement for it. Small
+            // enough to read as an annotation on the crosshair and far enough
+            // down to leave the hole being aimed at completely clear.
+            GameObject padlock = CreateHudImage(canvasGo.transform, "Padlock", 16f);
+            padlock.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -18f);
             padlock.GetComponent<Image>().sprite = Crosshair.GetPadlockSprite();
-            padlock.GetComponent<Image>().color = new Color(0.55f, 0.75f, 1f);
+            padlock.GetComponent<Image>().color = new Color(0.62f, 0.8f, 1f, 0.9f);
             padlock.GetComponent<Image>().enabled = false;
+
+            // The free pointer, used while a rotation dial is up. Pivoted at
+            // its own tip so it points at the position it is given rather than
+            // straddling it.
+            GameObject pointer = CreateHudImage(canvasGo.transform, "Pointer", 26f);
+            pointer.GetComponent<Image>().sprite = Crosshair.GetPointerSprite();
+            pointer.GetComponent<RectTransform>().pivot = new Vector2(0f, 1f);
+            pointer.GetComponent<Image>().enabled = false;
 
             BuildKeybindHints(canvasGo.transform);
             BuildMessageBanner(canvasGo.transform);
@@ -508,8 +516,8 @@ namespace VexDesigner.EditorTools
             var crosshair = canvasGo.AddComponent<Crosshair>();
             var so = new SerializedObject(crosshair);
             so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
-            so.FindProperty("hand").objectReferenceValue = hand.GetComponent<Image>();
             so.FindProperty("padlock").objectReferenceValue = padlock.GetComponent<Image>();
+            so.FindProperty("pointer").objectReferenceValue = pointer.GetComponent<Image>();
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // An EventSystem is required for any UI interaction. Without one
