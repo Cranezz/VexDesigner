@@ -217,23 +217,23 @@ namespace VexDesigner.Parts
             PartDefinition nut, Quaternion currentRotation, NutSeating seating,
             Vector3 nutScale, out Vector3 position, out Quaternion rotation)
         {
+            // A nut has a right way up. Its axis is baked running from the face
+            // that meets the metal toward the free end, so putting that axis
+            // down the screw puts the correct face against the join - flange
+            // first on a keps nut, flat face first on a nylock.
+            //
+            // Turning it whichever way needed the least rotation was the
+            // earlier rule, and it seated half of them upside down.
             Vector3 axis = nut.fastener.localAxis.normalized;
             Vector3 current = (currentRotation * axis).normalized;
+            Vector3 down = -seating.WorldNormal;
 
-            // Flip only if it is currently pointing the wrong way.
-            Vector3 wanted = Vector3.Dot(current, seating.WorldNormal) >= 0f
-                ? seating.WorldNormal
-                : -seating.WorldNormal;
+            rotation = Quaternion.FromToRotation(current, down) * currentRotation;
 
-            rotation = Quaternion.FromToRotation(current, wanted) * currentRotation;
-
-            // The seating point is a face, but the nut's origin is its middle,
-            // so it has to be pushed down the screw by half its height.
-            float half = nut.NutThicknessMetres * 0.5f;
-            Vector3 centre = seating.WorldPosition - (seating.WorldNormal * half);
-
+            // The seat point is that same face, so no half-height fudge is
+            // needed: put the face on the join and the nut is placed.
             Vector3 offset = rotation * Vector3.Scale(nut.fastener.localSeatPoint, nutScale);
-            position = centre - offset;
+            position = seating.WorldPosition - offset;
         }
 
         /// <summary>

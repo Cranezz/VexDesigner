@@ -28,26 +28,26 @@ MonoBehaviour:
   mesh: {fileID: -2432090755550338912, guid: c6c9a0a42592c344f996da12f7024764, type: 3}
   holePitchInches: 0.5
   fastener:
-    localAxis: {x: 0, y: 1, z: 0}
-    localSeatPoint: {x: 0, y: 0, z: 0}
+    localAxis: {x: -0, y: -1, z: -0}
+    localSeatPoint: {x: 0, y: 0.00238125, z: 0}
     shankLengthInches: 0
     headHeightInches: 0
     thicknessInches: 0.1875
   holeSet:
     holes:
     - front:
-        localPosition: {x: 0, y: 0.00238125, z: 0}
-        localNormal: {x: 0, y: 1, z: 0}
-        width: 0.003661663
-      back:
         localPosition: {x: 0, y: -0.00238125, z: 0}
         localNormal: {x: -0, y: -1, z: -0}
+        width: 0.003661663
+      back:
+        localPosition: {x: 0, y: 0.00238125, z: 0}
+        localNormal: {x: 0, y: 1, z: 0}
         width: 0.003661663
       depth: 0.0047625
       type: 1
       shape: 1
     measuredPitchInches: 0
-    generatedAt: 2026-08-14 19:28
+    generatedAt: 2026-08-14 21:00
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85

@@ -180,6 +180,13 @@ namespace VexDesigner.Parts
         {
             foreach (PartInstance part in members)
             {
+                // Followers are children of the leader, so the leader carries
+                // them. Moving them as well would move them twice.
+                if (IsWelded && part != Leader)
+                {
+                    continue;
+                }
+
                 if (part == null)
                 {
                     continue;
@@ -200,7 +207,7 @@ namespace VexDesigner.Parts
         {
             foreach (PartInstance part in members)
             {
-                if (part == null)
+                if (part == null || (IsWelded && part != Leader))
                 {
                     continue;
                 }
@@ -220,105 +227,99 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Makes the whole assembly one rigid body, held together by the
-        /// member in hand.
+        /// Makes the assembly one rigid body: one Rigidbody, several colliders.
         ///
-        /// The followers are *parented* to the leader and have their own
+        /// The followers are parented to the leader and have their own
         /// Rigidbody removed, which in Unity makes their colliders part of the
         /// leader's body. That is not an approximation of being joined - it is
-        /// one body with several shapes, so the parts cannot drift apart at any
-        /// speed, and the assembly collides with the bench as the single object
-        /// it is.
+        /// literally one body with several shapes, so bolted parts cannot drift
+        /// apart at any speed, under any force, and the assembly falls, tips
+        /// and lands as the single object it is.
         ///
-        /// The first attempt copied the leader's pose onto the followers every
-        /// physics step. It looked right standing still and came apart the
-        /// moment anything moved quickly, which is what a copied pose always
-        /// does: the leader is interpolated between physics steps and the
-        /// copies are not, so they lag by up to a frame - and a frame at
-        /// carrying speed is a visible gap.
+        /// Two earlier attempts came up short in the same way, by treating the
+        /// weld as something that only had to hold while the user was holding
+        /// the robot. Copying the leader's pose onto the others every physics
+        /// step looked right standing still and came apart the moment anything
+        /// moved, because the leader is interpolated between steps and copies
+        /// are not. Welding only during a carry survived that, and then let the
+        /// robot fall to pieces the instant it was unfrozen - each part its own
+        /// body again, each finding its own way to the floor.
         ///
-        /// Joints were the other option and are worse here. A joint is a spring
-        /// with a very high stiffness, so it stretches under load and rings
-        /// afterwards; two dozen of them in a robot is a machine that wobbles.
+        /// Joints were the other option and are worse. A joint is a very stiff
+        /// spring, so it stretches under load and rings afterwards; two dozen
+        /// of them is a robot that wobbles.
         /// </summary>
-        public void BeginFollow(PartInstance leader)
+        public void Weld()
         {
-            EndFollow();
-
-            if (leader == null || members.Count < 2)
+            if (IsWelded || members.Count < 2)
             {
                 return;
             }
 
-            followLeader = leader;
-            CarriedLeader = leader;
-            Transform lead = leader.transform;
+            Leader = ChooseLeader();
+
+            if (Leader == null)
+            {
+                return;
+            }
+
+            Transform lead = Leader.transform;
 
             foreach (PartInstance part in members)
             {
-                if (part == null || part == leader)
+                if (part == null || part == Leader)
                 {
                     continue;
                 }
 
                 var body = part.GetComponent<Rigidbody>();
 
-                follow.Add(new Follower
+                welds.Add(new Weld_
                 {
                     part = part,
                     parent = part.transform.parent,
                     definition = part.Definition,
                 });
 
-                // A child with its own Rigidbody stays a separate body no
-                // matter how it is parented, so it has to go for the colliders
-                // to be adopted.
+                // A child with its own Rigidbody stays a separate body however
+                // it is parented, so it has to go for the colliders to be
+                // adopted into the leader's.
                 if (body != null)
                 {
-                    Object.Destroy(body);
+                    Object.DestroyImmediate(body);
                 }
 
                 part.transform.SetParent(lead, true);
             }
+
+            Welded.Add(this);
         }
 
-        /// <summary>
-        /// Kept for callers that used to drive the followers by hand. The
-        /// parenting does the work now, every frame, for free.
-        /// </summary>
-        public void UpdateFollow()
+        public void Unweld()
         {
-        }
-
-        public void EndFollow()
-        {
-            foreach (Follower follower in follow)
+            foreach (Weld_ weld in welds)
             {
-                if (follower.part == null)
+                if (weld.part == null)
                 {
                     continue;
                 }
 
-                follower.part.transform.SetParent(follower.parent, true);
+                weld.part.transform.SetParent(weld.parent, true);
 
-                // Physics back, from the part's own specification rather than
-                // from whatever the destroyed body happened to hold.
-                if (follower.definition != null &&
-                    follower.part.GetComponent<Rigidbody>() == null)
+                if (weld.definition != null &&
+                    weld.part.GetComponent<Rigidbody>() == null)
                 {
-                    PartFactory.AddPhysics(follower.part.gameObject, follower.definition);
+                    PartFactory.AddPhysics(weld.part.gameObject, weld.definition);
                 }
 
-                var body = follower.part.GetComponent<Rigidbody>();
+                var body = weld.part.GetComponent<Rigidbody>();
 
                 if (body != null)
                 {
-                    // Only the group's *current* state decides this. An earlier
-                    // version also remembered whether the part had been
-                    // kinematic when it was picked up, which meant unfreezing an
-                    // assembly while holding it unfroze the part in hand and
-                    // left the rest pinned: one part fell and the robot stayed
-                    // in the air.
+                    // Only the group's current state decides this. Remembering
+                    // what a part had been when it was welded meant unfreezing
+                    // an assembly left the followers pinned in mid-air while
+                    // the leader fell out of the robot.
                     body.isKinematic = IsFrozen;
                     body.useGravity = !IsFrozen;
                     body.linearVelocity = Vector3.zero;
@@ -326,43 +327,76 @@ namespace VexDesigner.Parts
                 }
             }
 
-            follow.Clear();
-
-            if (CarriedLeader == followLeader)
-            {
-                CarriedLeader = null;
-            }
-
-            followLeader = null;
+            welds.Clear();
+            Welded.Remove(this);
+            Leader = null;
         }
 
         /// <summary>
-        /// The part currently holding an assembly together in the user's hand,
-        /// if any.
+        /// Takes every assembly apart, so the graph can be worked out again.
         ///
-        /// Static because the weld has to survive the assembly being worked
-        /// out again. Groups are thrown away and rebuilt whenever a fastener
-        /// changes, and the records of what was welded to what live on the
-        /// group - so placing a nut while holding the robot discarded them,
-        /// leaving those parts parented to the leader with no bodies of their
-        /// own and no way back. They looked exactly as though the new part had
-        /// stolen them.
+        /// Static because the welds outlive the groups that made them: groups
+        /// are thrown away and rebuilt whenever a fastener changes, and a weld
+        /// whose group had been discarded would leave those parts parented to
+        /// another with no bodies of their own and no way back.
         /// </summary>
-        public static PartInstance CarriedLeader { get; private set; }
+        public static void UnweldAll()
+        {
+            for (int i = Welded.Count - 1; i >= 0; i--)
+            {
+                Welded[i].Unweld();
+            }
 
-        private struct Follower
+            Welded.Clear();
+        }
+
+        /// <summary>
+        /// The part whose Rigidbody the whole assembly moves on.
+        ///
+        /// The heaviest, so the body's centre of mass and inertia are closest
+        /// to the truth - a robot swinging about its C-channel behaves far
+        /// better than one swinging about whichever nut happened to be first
+        /// in the list.
+        /// </summary>
+        private PartInstance ChooseLeader()
+        {
+            PartInstance best = null;
+            float heaviest = -1f;
+
+            foreach (PartInstance part in members)
+            {
+                if (part == null)
+                {
+                    continue;
+                }
+
+                float mass = part.Definition == null ? 0f : part.Definition.MassGrams;
+
+                if (mass > heaviest)
+                {
+                    heaviest = mass;
+                    best = part;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>The body the assembly moves on, or null if it is one part.</summary>
+        public PartInstance Leader { get; private set; }
+
+        public bool IsWelded => Leader != null;
+
+        private struct Weld_
         {
             public PartInstance part;
             public Transform parent;
             public PartDefinition definition;
-            public bool wasKinematic;
         }
 
-        private readonly List<Follower> follow = new List<Follower>();
-        private PartInstance followLeader;
+        private readonly List<Weld_> welds = new List<Weld_>();
 
-        /// <summary>True while the assembly is welded together in hand.</summary>
-        public bool IsCarried => followLeader != null;
+        private static readonly List<PartGroup> Welded = new List<PartGroup>();
 
         /// <summary>Centre of the group's rendered bounds.</summary>
         public Vector3 GetCentre()

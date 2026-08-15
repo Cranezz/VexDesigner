@@ -25,7 +25,11 @@ namespace VexDesigner.Parts
         [SerializeField] private float aimDistance = 12f;
 
         [Header("Carry")]
-        [SerializeField] private float minCarryDistance = 0.25f;
+        [Tooltip("Closest a carried part can be drawn in, in metres.\n\n" +
+                 "About three inches: near enough to put an eye to a join, and " +
+                 "no further out than the player's own body, so scrolling all " +
+                 "the way in is not stopped short by nothing visible.")]
+        [SerializeField] private float minCarryDistance = 0.08f;
         [SerializeField] private float maxCarryDistance = 4f;
 
         [Tooltip("Fraction of the current distance moved per scroll notch.")]
@@ -1127,6 +1131,18 @@ namespace VexDesigner.Parts
             LoosenNut(existing.GetComponent<PartInstance>());
 
             var instance = existing.GetComponent<PartInstance>();
+
+            // A bolted assembly is one rigid body, and that body belongs to the
+            // leader. Grabbing a follower would find no Rigidbody, and adding
+            // one would break the very weld that holds the robot together.
+            PartInstance leader = instance?.Group?.Leader;
+
+            if (leader != null && leader != instance)
+            {
+                existing = leader.gameObject;
+                instance = leader;
+            }
+
             PartDefinition existingDefinition = instance == null ? null : instance.Definition;
 
             // A frozen part stays frozen when grabbed - only K releases it -
@@ -1218,11 +1234,6 @@ namespace VexDesigner.Parts
             carriedCollider = go.GetComponent<Collider>();
 
             carriedInstance?.Group?.SetGrabbed(true);
-
-            // The rest of the assembly is welded onto this part for the
-            // duration, so the whole thing moves as one object rather than as a
-            // group of parts that merely agree about where they are.
-            carriedInstance?.Group?.BeginFollow(carriedInstance);
 
             // And none of it shoves the player around. Walking into what you
             // are carrying is the commonest way to knock a build over, and it
@@ -1846,7 +1857,6 @@ namespace VexDesigner.Parts
             // that it was ever removed.
             bool wasNut = carriedDefinition != null && carriedDefinition.IsNut;
 
-            group?.EndFollow();
             group?.SetGrabbed(false);
             group?.WakeNeighbours();
 
@@ -2029,17 +2039,34 @@ namespace VexDesigner.Parts
 
             Collider nearest = null;
             float nearestDistance = float.MaxValue;
+            int nearestRank = int.MaxValue;
 
             for (int i = 0; i < count; i++)
             {
-                if (hits[i].distance >= nearestDistance ||
-                    IsCarriedCollider(hits[i].collider))
+                if (IsCarriedCollider(hits[i].collider))
+                {
+                    continue;
+                }
+
+                // Ranked by real metal first, exactly as the hover test is.
+                // Judging by collider distance alone made a screw inside a
+                // C-channel unreachable: the channel's convex hull fills the
+                // channel, so the hull was always nearer than the screw, the
+                // nearest thing under the crosshair was the channel, and a nut
+                // could never find a screw to go on. A screw short enough to
+                // sit entirely inside the hull could never take one at all.
+                bool metal = TrueDistance(hits[i], out float distance);
+                int rank = metal ? 0 : 1;
+
+                if (rank > nearestRank ||
+                    (rank == nearestRank && distance >= nearestDistance))
                 {
                     continue;
                 }
 
                 nearest = hits[i].collider;
-                nearestDistance = hits[i].distance;
+                nearestDistance = distance;
+                nearestRank = rank;
             }
 
             return nearest == null ? null : nearest.GetComponentInParent<T>();

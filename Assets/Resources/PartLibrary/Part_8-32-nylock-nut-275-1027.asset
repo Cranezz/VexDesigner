@@ -29,7 +29,7 @@ MonoBehaviour:
   holePitchInches: 0.5
   fastener:
     localAxis: {x: 0, y: 1, z: 0}
-    localSeatPoint: {x: 0, y: 0.0024476177, z: 0}
+    localSeatPoint: {x: 0, y: 0, z: 0}
     shankLengthInches: 0
     headHeightInches: 0
     thicknessInches: 0.1927258
@@ -47,7 +47,7 @@ MonoBehaviour:
       type: 1
       shape: 1
     measuredPitchInches: 0
-    generatedAt: 2026-08-14 19:28
+    generatedAt: 2026-08-14 21:00
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85

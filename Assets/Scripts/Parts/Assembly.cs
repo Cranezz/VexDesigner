@@ -46,12 +46,11 @@ namespace VexDesigner.Parts
         {
             PartHoles heldHoles = held == null ? null : held.GetComponent<PartHoles>();
 
-            // An assembly in the user's hand is physically welded together, and
-            // the record of that lives on the group about to be discarded. It
-            // is taken apart first and put back afterwards, so the weld follows
-            // the parts into whatever assembly they now belong to.
-            PartInstance carried = PartGroup.CarriedLeader;
-            carried?.Group?.EndFollow();
+            // Assemblies are physically welded, and the record of that lives on
+            // the groups about to be discarded. Everything is taken apart
+            // first and put back at the end, so the welds follow the parts
+            // into whatever assembly they now belong to.
+            PartGroup.UnweldAll();
 
             IReadOnlyList<PartInstance> parts = PartInstance.All;
             IReadOnlyList<PlacedScrew> screws = PlacedScrew.All;
@@ -96,18 +95,28 @@ namespace VexDesigner.Parts
             // Parts bolted face to face overlap by a fraction of a millimetre,
             // and a whole robot of those pushing apart at once is an assembly
             // that shakes itself to pieces.
-            carried?.Group?.BeginFollow(carried);
-
             var seen = new HashSet<PartGroup>();
 
             for (int i = 0; i < parts.Count; i++)
             {
                 PartGroup group = parts[i] == null ? null : parts[i].Group;
 
-                if (group != null && group.Members.Count > 1 && seen.Add(group))
+                if (group == null || group.Members.Count < 2 || !seen.Add(group))
                 {
-                    CollisionExemptions.ExcuseWithin(group.Members);
+                    continue;
                 }
+
+                // Bolted parts overlap by a fraction of a millimetre, and a
+                // whole robot of those pushing apart at once shakes itself to
+                // pieces. Excused before welding, since the pairs are the same
+                // either way and a welded body will not consult them.
+                CollisionExemptions.ExcuseWithin(group.Members);
+
+                // And then the assembly becomes one object, permanently - not
+                // only while someone is holding it. An assembly that is one
+                // body when carried and several when let go falls apart the
+                // moment it is unfrozen.
+                group.Weld();
             }
         }
 

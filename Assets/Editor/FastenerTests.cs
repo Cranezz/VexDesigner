@@ -47,6 +47,7 @@ namespace VexDesigner.EditorTools
             Case(TightNutStillSeats);
             Case(ChainOfThreeStaysOneAssembly);
             Case(NutSeatsWhereverYouPoint);
+            Case(WeldedAssemblyIsOneBody);
 
             if (failures == 0)
             {
@@ -773,6 +774,69 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
+        /// An assembly must be one rigid body, not several that agree about
+        /// where they are.
+        ///
+        /// Anything less falls apart under gravity: each part its own body,
+        /// each finding its own way to the floor. One Rigidbody with all the
+        /// colliders parented to it cannot come apart at any speed.
+        /// </summary>
+        private static void WeldedAssemblyIsOneBody(List<GameObject> rubbish)
+        {
+            if (!Stack(rubbish, out GameObject upper, out GameObject lower,
+                    out PlacedScrew screw, out GameObject nut, 0f))
+            {
+                return;
+            }
+
+            PartGroup group = screw.GetComponent<PartInstance>().Group;
+
+            True("the assembly is welded", group.IsWelded);
+
+            if (!group.IsWelded)
+            {
+                return;
+            }
+
+            // The heaviest part carries the body: a robot swinging about its
+            // C-channel behaves far better than one swinging about a nut.
+            True("the heaviest part leads",
+                group.Leader == upper.GetComponent<PartInstance>() ||
+                group.Leader == lower.GetComponent<PartInstance>());
+
+            int bodies = 0;
+
+            foreach (PartInstance part in group.Members)
+            {
+                if (part.GetComponent<Rigidbody>() != null)
+                {
+                    bodies++;
+                }
+
+                if (part != group.Leader)
+                {
+                    True(part.name + " is parented to the leader",
+                        part.transform.parent == group.Leader.transform);
+                }
+            }
+
+            Near("exactly one body for the whole assembly", bodies, 1f, 0.1f);
+
+            // And taking it apart gives every part its body back, or a
+            // dismantled robot would be a pile of things that cannot move.
+            Assembly.Rebuild(nut.GetComponent<PartInstance>());
+
+            True("the channels are apart again",
+                upper.GetComponent<PartInstance>().Group !=
+                lower.GetComponent<PartInstance>().Group);
+
+            True("the freed nut has its own body",
+                nut.GetComponent<Rigidbody>() != null);
+            True("and is no longer parented to anything",
+                nut.transform.parent == null);
+        }
+
+        /// <summary>
         /// True when two orientations differ only by whole quarter turns - the
         /// parts are parallel, however they are laid out.
         /// </summary>
@@ -900,7 +964,9 @@ namespace VexDesigner.EditorTools
             PartDefinition definition, Vector3 position, Quaternion rotation,
             List<GameObject> rubbish)
         {
-            GameObject go = PartFactory.Create(definition, withPhysics: false);
+            // With physics, so welding has real bodies to absorb and give back.
+            // Nothing moves: the editor does not step the simulation.
+            GameObject go = PartFactory.Create(definition, withPhysics: true);
             go.transform.SetPositionAndRotation(position, rotation);
             rubbish.Add(go);
             return go;

@@ -470,9 +470,60 @@ namespace VexDesigner.EditorTools
             }
             else
             {
-                // A nut seats on whichever face meets the metal, and it is
-                // symmetric, so either end will do. The centre is what matters.
-                fastener.localSeatPoint = bounds.center;
+                // A nut has a right way up, and the model says which. The
+                // flange of a keps nut and the flat face of a nylock are the
+                // ends that meet the metal, and both are the *wider* end -
+                // which is measurable, unlike the part number.
+                //
+                // Before this the nut simply used whichever end was already
+                // nearer the screw, so a keps nut went on upside down half the
+                // time, sitting on its washer instead of clamping with it.
+                float band = half * 0.5f;
+
+                float positiveRadius = 0f;
+                float negativeRadius = 0f;
+
+                foreach (Vector3 vertex in mesh.vertices)
+                {
+                    Vector3 offset = vertex - bounds.center;
+                    float along = offset[longest];
+
+                    if (Mathf.Abs(along) < band)
+                    {
+                        continue;
+                    }
+
+                    float radius = Vector3.ProjectOnPlane(offset, axis).magnitude;
+
+                    if (along > 0f)
+                    {
+                        positiveRadius = Mathf.Max(positiveRadius, radius);
+                    }
+                    else
+                    {
+                        negativeRadius = Mathf.Max(negativeRadius, radius);
+                    }
+                }
+
+                // The axis runs from the seating face toward the free end, so
+                // a nut threaded on always points its wide end at the metal.
+                bool seatOnPositive = positiveRadius >= negativeRadius;
+
+                if (seatOnPositive)
+                {
+                    axis = -axis;
+                }
+
+                Vector3 seat = bounds.center;
+                seat[longest] = bounds.center[longest] + (seatOnPositive ? half : -half);
+                fastener.localSeatPoint = seat;
+
+                Debug.Log(
+                    $"[Fasteners] {entry.sku} seats on its " +
+                    $"{(seatOnPositive ? "positive" : "negative")} face " +
+                    $"({Mathf.Max(positiveRadius, negativeRadius) / InchesToMetres:0.000} in " +
+                    $"across, against " +
+                    $"{Mathf.Min(positiveRadius, negativeRadius) / InchesToMetres:0.000} in).");
             }
 
             fastener.localAxis = axis;
