@@ -173,6 +173,7 @@ namespace VexDesigner.Parts
                 HoleIndex = index,
                 IsBackFace = isBack,
                 Face = face,
+                Shape = hole.shape,
                 WorldPosition = worldPosition,
                 WorldNormal = worldNormal,
             };
@@ -238,6 +239,7 @@ namespace VexDesigner.Parts
                 HoleIndex = hit.HoleIndex,
                 IsBackFace = !hit.IsBackFace,
                 Face = other,
+                Shape = hole.shape,
                 WorldPosition = transform.TransformPoint(other.localPosition),
                 WorldNormal = transform.TransformDirection(other.localNormal).normalized,
             };
@@ -255,6 +257,7 @@ namespace VexDesigner.Parts
                 HoleIndex = holeIndex,
                 IsBackFace = backFace,
                 Face = face,
+                Shape = hole.shape,
                 WorldPosition = transform.TransformPoint(face.localPosition),
                 WorldNormal = transform.TransformDirection(face.localNormal).normalized,
             };
@@ -270,6 +273,9 @@ namespace VexDesigner.Parts
         public HoleFace Face;
         public Vector3 WorldPosition;
         public Vector3 WorldNormal;
+
+        /// <summary>Rounded square or circle. Drives how the marker is drawn.</summary>
+        public HoleShape Shape;
 
         public bool IsValid => Part != null;
 

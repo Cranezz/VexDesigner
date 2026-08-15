@@ -33,16 +33,21 @@ namespace VexDesigner.Parts
         /// the hole, and at a glance it is hard to tell which of two adjacent
         /// holes a ring belongs to.
         /// </summary>
-        public static Mesh Filled(float width)
+        public static Mesh Filled(float width, HoleShape shape = HoleShape.Square)
         {
-            int key = Mathf.RoundToInt(width * 100000f) + 7;
+            // Shape folded into the key, or a round hole would be handed the
+            // square mesh cached for the same width.
+            int key = (Mathf.RoundToInt(width * 100000f) * 2) +
+                      (shape == HoleShape.Round ? 1 : 0) + 7;
 
             if (Cache.TryGetValue(key, out Mesh cached) && cached != null)
             {
                 return cached;
             }
 
-            var edge = Profile(width * 0.5f);
+            var edge = shape == HoleShape.Round
+                ? Circle(width * 0.5f)
+                : Profile(width * 0.5f);
 
             // Triangle fan from the centre. The profile is convex, so a fan is
             // both correct and the cheapest way to fill it.
@@ -72,6 +77,27 @@ namespace VexDesigner.Parts
 
             Cache[key] = mesh;
             return mesh;
+        }
+
+        /// <summary>
+        /// Points around a circle of the given radius.
+        ///
+        /// Enough segments that a hole a quarter of an inch across reads as
+        /// round rather than as a polygon, and few enough that a part with a
+        /// hundred of them costs nothing.
+        /// </summary>
+        private static List<Vector2> Circle(float radius)
+        {
+            const int segments = 28;
+            var points = new List<Vector2>(segments);
+
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = (i / (float)segments) * Mathf.PI * 2f;
+                points.Add(new Vector2(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius));
+            }
+
+            return points;
         }
 
         /// <summary>

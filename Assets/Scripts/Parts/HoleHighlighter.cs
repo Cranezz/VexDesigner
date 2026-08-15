@@ -20,6 +20,7 @@ namespace VexDesigner.Parts
         private MeshRenderer meshRenderer;
         private Material material;
         private float currentWidth = -1f;
+        private HoleShape currentShape = HoleShape.Square;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
@@ -68,10 +69,12 @@ namespace VexDesigner.Parts
 
             // Mesh rebuilt only when the size changes; every hole on a part is
             // usually the same width, so this is nearly always a cache hit.
-            if (!Mathf.Approximately(currentWidth, hit.Face.width))
+            if (!Mathf.Approximately(currentWidth, hit.Face.width) ||
+                currentShape != hit.Shape)
             {
                 currentWidth = hit.Face.width;
-                filter.sharedMesh = HoleMarkerMesh.Filled(hit.Face.width);
+                currentShape = hit.Shape;
+                filter.sharedMesh = HoleMarkerMesh.Filled(hit.Face.width, hit.Shape);
             }
 
             transform.position = hit.WorldPosition;

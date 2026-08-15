@@ -15,9 +15,23 @@ namespace VexDesigner.Parts
     /// through four plates with nothing on the end falls out when you pick it
     /// up.
     /// </summary>
+    [ExecuteAlways]
     [RequireComponent(typeof(PartInstance))]
     public sealed class PlacedScrew : MonoBehaviour
     {
+        /// <summary>
+        /// Every screw currently driven into something. These are what the
+        /// assembly graph is derived from, so they are the closest thing this
+        /// project has to a source of truth about what is joined to what.
+        /// </summary>
+        private static readonly List<PlacedScrew> Live = new List<PlacedScrew>();
+
+        public static IReadOnlyList<PlacedScrew> All => Live;
+
+        private void OnEnable() => Live.Add(this);
+
+        private void OnDisable() => Live.Remove(this);
+
         private readonly List<ScrewPass> passes = new List<ScrewPass>();
 
         private PartInstance cachedInstance;
@@ -78,12 +92,6 @@ namespace VexDesigner.Parts
             }
         }
 
-        /// <summary>The nut on this screw, if one has been fitted.</summary>
-        public PartInstance Nut { get; private set; }
-
-        /// <summary>Distance from under the head to the nut's near face.</summary>
-        public float NutSeat { get; private set; }
-
         public IReadOnlyList<ScrewPass> Passes => passes;
 
         /// <summary>Usable shank length in metres.</summary>
@@ -115,8 +123,7 @@ namespace VexDesigner.Parts
         /// </summary>
         public void Refresh()
         {
-            RecomputePasses();
-            RebuildGroup();
+            Assembly.Rebuild();
         }
 
         /// <summary>
@@ -128,14 +135,25 @@ namespace VexDesigner.Parts
         /// while the user was still deciding where to put the nut - before any
         /// click, and with no way back.
         /// </summary>
-        public void RecomputePasses()
+        /// <param name="held">
+        /// A part currently in the user's hand, which must not be counted.
+        ///
+        /// A nut being offered to this screw is already positioned on it, so
+        /// its own threaded hole reads as something the screw passes through.
+        /// That changed where the next seat was, which moved the nut, which
+        /// changed the passes again - the nut visibly flicking between the
+        /// cursor and the metal, twice a frame. It is being *held*: it is not
+        /// on the screw until it is let go.
+        /// </param>
+        public void RecomputePasses(PartHoles held = null)
         {
             if (definition == null)
             {
                 return;
             }
 
-            ScrewLine.Gather(Seat, Direction, Length, passes, GetComponent<PartHoles>());
+            ScrewLine.Gather(
+                Seat, Direction, Length, passes, GetComponent<PartHoles>(), held);
         }
 
         /// <summary>
@@ -145,6 +163,13 @@ namespace VexDesigner.Parts
         /// The *deepest* one, so a screw through three plates into a threaded
         /// hole at the bottom holds all three rather than stopping at the first
         /// thing it met.
+        ///
+        /// A nut needs no special case. It is a part with a threaded hole, so
+        /// once it is on the screw it turns up as a gripping pass like any
+        /// other. An earlier version also stored which nut was fitted and where,
+        /// which was the same fact written down twice - and the two could
+        /// disagree, which is precisely the bookkeeping this design exists to
+        /// avoid. Where the nut *is* decides what is held, and nothing else.
         /// </summary>
         public float GripDepth()
         {
@@ -158,71 +183,18 @@ namespace VexDesigner.Parts
                 }
             }
 
-            if (Nut != null)
-            {
-                deepest = Mathf.Max(deepest, NutSeat);
-            }
-
             return deepest;
-        }
-
-        /// <summary>
-        /// Puts everything the screw clamps into one group, so it moves as a
-        /// single object.
-        /// </summary>
-        private void RebuildGroup()
-        {
-            float grip = GripDepth();
-
-            if (grip < 0f || instance == null || instance.Group == null)
-            {
-                // Nothing holds it. The screw is sitting in a hole, not
-                // fastening anything, and the parts stay independent.
-                return;
-            }
-
-            PartGroup group = instance.Group;
-
-            foreach (ScrewPass pass in passes)
-            {
-                // Only what lies between the head and the grip. A screw poking
-                // out beyond the nut passes through nothing else, but a hole
-                // further down the line than the nut is not clamped by it.
-                if (pass.Entry > grip + 1e-4f)
-                {
-                    continue;
-                }
-
-                var member = pass.Part.GetComponent<PartInstance>();
-                if (member != null && member.Group != null && member.Group != group)
-                {
-                    group.Merge(member.Group);
-                }
-            }
-
-            if (Nut != null && Nut.Group != null && Nut.Group != group)
-            {
-                group.Merge(Nut.Group);
-            }
-        }
-
-        /// <summary>
-        /// Fits a nut at <paramref name="seatDistance"/> from under the head.
-        /// </summary>
-        public void AttachNut(PartInstance nut, float seatDistance)
-        {
-            Nut = nut;
-            NutSeat = seatDistance;
-            Refresh();
         }
 
         /// <summary>
         /// Whether a nut of <paramref name="thickness"/> still fits with its
         /// near face at <paramref name="seatDistance"/>.
         ///
-        /// A nut hanging off the end of a screw is not fastened to anything, so
-        /// this is a hard requirement rather than a cosmetic one - and the
-        /// reason a builder reaches for a longer screw.
+        /// Not an error when it does not. A nut that will not go on simply does
+        /// not snap - the same as reaching for one in the workshop, finding no
+        /// thread left, and putting it back. Telling the user off for pointing
+        /// at the wrong screw would be noise, since the screw being too short
+        /// is obvious from looking at it.
         /// </summary>
         public bool NutFits(float seatDistance, float thickness)
         {

@@ -10,8 +10,22 @@ namespace VexDesigner.Parts
     /// its <see cref="Definition"/> ID plus its transform - never its mesh.
     /// The list of cut operations will live here too once cutting exists.
     /// </summary>
+    [ExecuteAlways]
     public sealed class PartInstance : MonoBehaviour
     {
+        /// <summary>
+        /// Every part in the workshop. The assembly graph starts by putting
+        /// each of these in a group of its own, so it needs to know them all.
+        /// </summary>
+        private static readonly System.Collections.Generic.List<PartInstance> Live =
+            new System.Collections.Generic.List<PartInstance>();
+
+        public static System.Collections.Generic.IReadOnlyList<PartInstance> All => Live;
+
+        private void OnEnable() => Live.Add(this);
+
+        private void OnDisable() => Live.Remove(this);
+
         [SerializeField] private PartDefinition definition;
 
         public PartDefinition Definition => definition;

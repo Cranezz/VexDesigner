@@ -40,6 +40,8 @@ namespace VexDesigner.EditorTools
             Case(NutOnTheEnd);
             Case(NutInAGap);
             Case(ScrewTooShortForANut);
+            Case(GroupingFormsAndComesApart);
+            Case(TwoScrewsHoldWhenOneComesOff);
 
             if (failures == 0)
             {
@@ -189,7 +191,8 @@ namespace VexDesigner.EditorTools
             Near("nut face is flush with the metal",
                 Vector3.Distance(nearFace.WorldPosition, seating.WorldPosition), 0f);
 
-            placed.AttachNut(nut.GetComponent<PartInstance>(), seating.Distance);
+            Assembly.Rebuild();
+            placed.RecomputePasses();
 
             True("the nut makes the screw grip", placed.GripDepth() >= 0f);
 
@@ -309,6 +312,160 @@ namespace VexDesigner.EditorTools
             // And a nut thicker than the whole screw must always be refused.
             True("an impossible nut is refused",
                 !placed.NutFits(used * InchesToMetres, placed.Length * 2f));
+        }
+
+        /// <summary>
+        /// A screw and nut through two channels joins all four; taking the nut
+        /// off puts them back to being four separate parts.
+        /// </summary>
+        private static void GroupingFormsAndComesApart(List<GameObject> rubbish)
+        {
+            if (!Stack(rubbish, out GameObject upper, out GameObject lower,
+                    out PlacedScrew screw, out GameObject nut, 0f))
+            {
+                return;
+            }
+
+            PartGroup group = screw.GetComponent<PartInstance>().Group;
+
+            True("upper channel is in the assembly",
+                group == upper.GetComponent<PartInstance>().Group);
+            True("lower channel is in the assembly",
+                group == lower.GetComponent<PartInstance>().Group);
+            True("nut is in the assembly",
+                group == nut.GetComponent<PartInstance>().Group);
+            Near("all four parts are one group", group.Members.Count, 4f, 0.1f);
+
+            // Taken off the way grabbing it does: rebuilt as though the nut
+            // were already in the user's hand.
+            Assembly.Rebuild(nut.GetComponent<PartInstance>());
+
+            True("upper channel comes free",
+                upper.GetComponent<PartInstance>().Group !=
+                lower.GetComponent<PartInstance>().Group);
+
+            Near("the screw is alone again",
+                screw.GetComponent<PartInstance>().Group.Members.Count, 1f, 0.1f);
+        }
+
+        /// <summary>
+        /// The case that made incremental merging untenable: two screws through
+        /// the same pair of parts. Removing one nut must not release them.
+        /// </summary>
+        private static void TwoScrewsHoldWhenOneComesOff(List<GameObject> rubbish)
+        {
+            if (!Stack(rubbish, out GameObject upper, out GameObject lower,
+                    out PlacedScrew first, out GameObject firstNut, 0f))
+            {
+                return;
+            }
+
+            // A second screw and nut through the next hole along, on the same
+            // two channels.
+            PartDefinition screwDef = Load("276-4996");
+            PartDefinition nutDef = Load("275-1028");
+
+            HoleHit second = upper.GetComponent<PartHoles>().FaceAt(1, false);
+            PlacedScrew secondScrew = DriveScrew(screwDef, second, rubbish);
+
+            if (secondScrew == null)
+            {
+                return;
+            }
+
+            if (!FitNut(secondScrew, nutDef, rubbish, out GameObject secondNut))
+            {
+                return;
+            }
+
+            True("both channels are joined",
+                upper.GetComponent<PartInstance>().Group ==
+                lower.GetComponent<PartInstance>().Group);
+
+            // First nut off. The second screw is still holding everything.
+            Assembly.Rebuild(firstNut.GetComponent<PartInstance>());
+
+            True("two screws, one nut removed: still joined",
+                upper.GetComponent<PartInstance>().Group ==
+                lower.GetComponent<PartInstance>().Group);
+
+            True("the loosened nut is no longer part of it",
+                firstNut.GetComponent<PartInstance>().Group !=
+                upper.GetComponent<PartInstance>().Group);
+
+            // Second nut off as well. Now nothing holds them, so they part.
+            Object.DestroyImmediate(firstNut);
+            Assembly.Rebuild(secondNut.GetComponent<PartInstance>());
+
+            True("last nut removed: they come apart",
+                upper.GetComponent<PartInstance>().Group !=
+                lower.GetComponent<PartInstance>().Group);
+
+        }
+
+        /// <summary>
+        /// Two channels a set distance apart, a screw through hole 0 of the
+        /// upper one, and a nut on the end of it.
+        /// </summary>
+        private static bool Stack(
+            List<GameObject> rubbish, out GameObject upper, out GameObject lower,
+            out PlacedScrew screw, out GameObject nut, float gapInches)
+        {
+            upper = null;
+            lower = null;
+            screw = null;
+            nut = null;
+
+            PartDefinition channelDef = Load("CCHL-2");
+            PartDefinition screwDef = Load("276-4996");
+            PartDefinition nutDef = Load("275-1028");
+
+            if (channelDef == null || screwDef == null || nutDef == null)
+            {
+                return false;
+            }
+
+            upper = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            HoleHit hole = upper.GetComponent<PartHoles>().FaceAt(0, false);
+
+            Vector3 down = -hole.WorldNormal *
+                ((0.0625f + gapInches) * InchesToMetres);
+
+            lower = Spawn(channelDef, down, Quaternion.identity, rubbish);
+
+            screw = DriveScrew(screwDef, hole, rubbish);
+
+            return screw != null && FitNut(screw, nutDef, rubbish, out nut);
+        }
+
+        private static bool FitNut(
+            PlacedScrew screw, PartDefinition nutDef, List<GameObject> rubbish,
+            out GameObject nut)
+        {
+            nut = null;
+
+            float lastExit = 0f;
+            foreach (ScrewPass pass in screw.Passes)
+            {
+                lastExit = Mathf.Max(lastExit, pass.Exit);
+            }
+
+            Ray aim = AimAt(screw, (lastExit + screw.Length) * 0.5f);
+            NutSeating seating = FastenerFitting.FindNutSeating(screw, nutDef, aim);
+
+            if (!seating.IsValid || !seating.Fits)
+            {
+                True("a nut fits on the test stack", false);
+                return false;
+            }
+
+            FastenerFitting.NutPose(
+                nutDef, Quaternion.identity, seating, Vector3.one,
+                out Vector3 position, out Quaternion rotation);
+
+            nut = Spawn(nutDef, position, rotation, rubbish);
+            Assembly.Rebuild();
+            return true;
         }
 
         // ------------------------------------------------------------------

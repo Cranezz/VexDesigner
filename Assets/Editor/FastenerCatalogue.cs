@@ -249,6 +249,9 @@ namespace VexDesigner.EditorTools
                 // The whole purpose of a nut. A screw that reaches one clamps
                 // everything between its head and this into one assembly.
                 type = HoleType.Threaded,
+
+                // Drilled and tapped, not broached square like VEX structure.
+                shape = HoleShape.Round,
             };
 
             definition.holeSet = new HoleSet

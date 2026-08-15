@@ -45,6 +45,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.0062675346, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -55,6 +56,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -4.3409103e-11, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -65,6 +67,7 @@ MonoBehaviour:
         width: 0.0048768
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -4.3409103e-11, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -75,6 +78,7 @@ MonoBehaviour:
         width: 0.0048768
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -4.3409103e-11, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -85,6 +89,7 @@ MonoBehaviour:
         width: 0.0048768
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -4.3409103e-11, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -95,6 +100,7 @@ MonoBehaviour:
         width: 0.0048768
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.012658723, y: 0.006391277, z: 0.000000038184226}
         localNormal: {x: -0, y: -0, z: 1}
@@ -105,6 +111,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.012658723, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -115,6 +122,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.0126587255, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -125,6 +133,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.012658727, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -135,6 +144,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.0126587255, y: 0.011125177, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -145,6 +155,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.012658723, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -155,6 +166,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.012658723, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -165,6 +177,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.0126587255, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -175,6 +188,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.019049995, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -185,6 +199,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.019049995, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -195,6 +210,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.025441272, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -205,6 +221,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.025441272, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -215,6 +232,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.025441285, y: -0.0063912747, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -225,6 +243,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.025441285, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -235,6 +254,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.025441272, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -245,6 +265,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.025441272, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -255,6 +276,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.025441285, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -265,6 +287,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.025441285, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -275,6 +298,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.031832453, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -285,6 +309,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.031832453, y: 2.923434e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -295,6 +320,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.038100008, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -305,6 +331,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.038100008, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -315,6 +342,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.038100008, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -325,6 +353,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.038100008, y: 0.006400802, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -335,6 +364,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.038100008, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -345,6 +375,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.038100008, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -355,6 +386,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.038100008, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -365,6 +397,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.038100008, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -375,6 +408,7 @@ MonoBehaviour:
         width: 0.0048768003
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.044367522, y: 2.923434e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -385,6 +419,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.04436753, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -395,6 +430,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.05075873, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -405,6 +441,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.05075873, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -415,6 +452,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.05075873, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -425,6 +463,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.05075873, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -435,6 +474,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.05075873, y: 0.011125177, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -445,6 +485,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.05075873, y: 0.011125177, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -455,6 +496,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.05075873, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -465,6 +507,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.05075873, y: -0.012700021, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -475,6 +518,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.057150003, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -485,6 +529,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.057150014, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -495,6 +540,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.06354124, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -505,6 +551,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.06354124, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -515,6 +562,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.06354127, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -525,6 +573,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.06354128, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -535,6 +584,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.06354124, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -545,6 +595,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.06354124, y: -0.012700021, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -555,6 +606,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.06354127, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -565,6 +617,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.06354127, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -575,6 +628,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.069932476, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -585,6 +639,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.06993249, y: 2.923434e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -595,6 +650,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.076199986, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -605,6 +661,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.076199986, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -615,6 +672,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.07619999, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -625,6 +683,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.07619999, y: 0.006400802, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -635,6 +694,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.076199986, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -645,6 +705,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.076199986, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -655,6 +716,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.07619999, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -665,6 +727,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.07619999, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -675,6 +738,7 @@ MonoBehaviour:
         width: 0.0048767966
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.08246751, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -685,6 +749,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.08246755, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -695,6 +760,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.08885873, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -705,6 +771,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.08885873, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -715,6 +782,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.088858776, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -725,6 +793,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.088858776, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -735,6 +804,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.08885873, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -745,6 +815,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.08885873, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -755,6 +826,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.088858776, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -765,6 +837,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.088858776, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -775,6 +848,7 @@ MonoBehaviour:
         width: 0.004572
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.095249936, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -785,6 +859,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.09524999, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -795,6 +870,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.10164124, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -805,6 +881,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.101641245, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -815,6 +892,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.10164129, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -825,6 +903,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1016413, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -835,6 +914,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.101641245, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -845,6 +925,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.101641245, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -855,6 +936,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.10164129, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -865,6 +947,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.10164129, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -875,6 +958,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.10803248, y: 2.923434e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -885,6 +969,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.10803251, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -895,6 +980,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.11429998, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -905,6 +991,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.11429998, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -915,6 +1002,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.114300005, y: 0.006400802, z: 0.000000038184226}
         localNormal: {x: -0, y: -0, z: 1}
@@ -925,6 +1013,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.114300005, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -935,6 +1024,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.11429998, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -945,6 +1035,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.11429998, y: 0.011125177, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -955,6 +1046,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.114300005, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -965,6 +1057,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.114300005, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -975,6 +1068,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.12056745, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -985,6 +1079,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.12056753, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -995,6 +1090,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.12695873, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1005,6 +1101,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.12695873, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1015,6 +1112,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1269588, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1025,6 +1123,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1269588, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1035,6 +1134,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.12695873, y: 0.011125177, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1045,6 +1145,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.12695873, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1055,6 +1156,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1269588, y: 0.011125177, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1065,6 +1167,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1269588, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1075,6 +1178,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.13334998, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1085,6 +1189,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.13335, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1095,6 +1200,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1397412, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1105,6 +1211,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1397412, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1115,6 +1222,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.13974126, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1125,6 +1233,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.13974126, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1135,6 +1244,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1397412, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1145,6 +1255,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1397412, y: -0.012700021, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1155,6 +1266,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.13974126, y: -0.012700021, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1165,6 +1277,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.13974126, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1175,6 +1288,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.14613248, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1185,6 +1299,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.14613251, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1195,6 +1310,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1523999, y: -0.0064007994, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1205,6 +1321,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1523999, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1215,6 +1332,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.15239994, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1225,6 +1343,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.15239994, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1235,6 +1354,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1523999, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1245,6 +1365,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1523999, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1255,6 +1376,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.15239994, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1265,6 +1387,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.15239994, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1275,6 +1398,7 @@ MonoBehaviour:
         width: 0.004876789
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.15866743, y: 1.461717e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1285,6 +1409,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.15866743, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1295,6 +1420,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.16505866, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1305,6 +1431,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.16505869, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1315,6 +1442,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1650587, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1325,6 +1453,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1650587, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1335,6 +1464,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.16505866, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1345,6 +1475,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.16505866, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1355,6 +1486,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1650587, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1365,6 +1497,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1650587, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1375,6 +1508,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.17144997, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1385,6 +1519,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.17145, y: 4.760093e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1395,6 +1530,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.17784122, y: -0.0063912747, z: 0.000000038184226}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1405,6 +1541,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.17784122, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1415,6 +1552,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.17784126, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1425,6 +1563,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.17784128, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1435,6 +1574,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.17784122, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1445,6 +1585,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.17784122, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1455,6 +1596,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.17784128, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1465,6 +1607,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.17784128, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1475,6 +1618,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.1842325, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1485,6 +1629,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1842325, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1495,6 +1640,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.19050002, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1505,6 +1651,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.19050002, y: 0.006400802, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1515,6 +1662,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.19050005, y: -0.0064007994, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1525,6 +1673,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.19050005, y: 0.006400802, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1535,6 +1684,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.19050002, y: 0.011125177, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1545,6 +1695,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.19050002, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1555,6 +1706,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.19050005, y: 0.011125207, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1565,6 +1717,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.19050005, y: -0.012699991, z: -0.0075946003}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1575,6 +1728,7 @@ MonoBehaviour:
         width: 0.004876804
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.19676755, y: 1.461717e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1585,6 +1739,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.1967676, y: 2.923434e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1595,6 +1750,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.20315878, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1605,6 +1761,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.20315878, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1615,6 +1772,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.20315878, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1625,6 +1783,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.20315878, y: 0.006391277, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1635,6 +1794,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.20315878, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1645,6 +1805,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.20315878, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1655,6 +1816,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.20315878, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1665,6 +1827,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.20315878, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1675,6 +1838,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747547
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.20955007, y: 4.760093e-11, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1685,6 +1849,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.20955014, y: 4.760093e-11, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1695,6 +1860,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.21594127, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1705,6 +1871,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.21594127, y: 0.006391277, z: 0.000000038184226}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1715,6 +1882,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748441
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.21594143, y: -0.0063912747, z: 0.000000008381903}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1725,6 +1893,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015748143
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.21594143, y: 0.006391277, z: -0.00000002142042}
         localNormal: {x: -0, y: -0, z: 1}
@@ -1735,6 +1904,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.21594127, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1745,6 +1915,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: -0.21594127, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1755,6 +1926,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.21594143, y: 0.011125207, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1765,6 +1937,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     - front:
         localPosition: {x: 0.21594143, y: -0.012699991, z: -0.007604125}
         localNormal: {x: -0, y: -1, z: -0}
@@ -1775,6 +1948,7 @@ MonoBehaviour:
         width: 0.004572001
       depth: 0.0015747845
       type: 0
+      shape: 0
     measuredPitchInches: 0.34536502
     generatedAt: 2026-08-13 07:16
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}

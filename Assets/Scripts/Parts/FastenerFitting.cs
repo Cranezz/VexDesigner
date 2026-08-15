@@ -89,9 +89,32 @@ namespace VexDesigner.Parts
         public static NutSeating FindNutSeating(
             PlacedScrew screw, PartDefinition nut, Ray aim)
         {
+            if (screw == null || nut == null || !nut.IsNut)
+            {
+                return default;
+            }
+
+            return FindSeating(screw, nut.NutThicknessMetres, aim);
+        }
+
+        /// <summary>
+        /// Where anything of a given thickness comes to rest on a screw.
+        ///
+        /// A nut is only the commonest case. A C-channel held by one of its
+        /// holes threads onto a screw by exactly the same rule - slide it up
+        /// the shank until it meets metal - and it would be strange for the two
+        /// to behave differently when the user is doing the same thing with
+        /// their hands.
+        /// </summary>
+        /// <param name="thickness">
+        /// How much shank the thing takes up: a nut's height, or the depth of
+        /// the hole being threaded on.
+        /// </param>
+        public static NutSeating FindSeating(PlacedScrew screw, float thickness, Ray aim)
+        {
             var seating = new NutSeating();
 
-            if (screw == null || nut == null || !nut.IsNut)
+            if (screw == null)
             {
                 return seating;
             }
@@ -101,7 +124,6 @@ namespace VexDesigner.Parts
             Vector3 seat = screw.Seat;
             Vector3 direction = screw.Direction;
             float length = screw.Length;
-            float thickness = nut.NutThicknessMetres;
 
             // Reused rather than allocated: this runs every frame a nut is
             // held over a screw.
@@ -136,10 +158,30 @@ namespace VexDesigner.Parts
 
             if (distance < 0f)
             {
-                // Pointing at metal, or at nothing in particular. Fall back to
-                // the end of the last plate, which is where a nut goes.
+                // Pointing at metal. Take the nearest stretch of bare shank
+                // instead of jumping to the end - looking at the head of a
+                // screw that goes straight into a plate means the near side of
+                // that plate, not two inches further down.
+                //
+                // With no gaps at all, this is the end of the last plate; and
+                // on a bare screw that is zero, so the thing runs all the way
+                // up to the head. A nut on a screw holding nothing is
+                // tightened against the head, not left dangling.
                 distance = LastExit(screw);
-                inGap = false;
+                float best = float.MaxValue;
+
+                for (int i = 0; i < gaps.Count; i++)
+                {
+                    float reach = Mathf.Min(
+                        Mathf.Abs(pointed - gaps[i].x), Mathf.Abs(pointed - gaps[i].y));
+
+                    if (reach < best)
+                    {
+                        best = reach;
+                        distance = gaps[i].x;
+                        inGap = i < gaps.Count - 1;
+                    }
+                }
             }
 
             seating.Distance = distance;

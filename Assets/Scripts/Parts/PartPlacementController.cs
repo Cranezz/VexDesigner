@@ -1,5 +1,6 @@
 namespace VexDesigner.Parts
 {
+    using System.Collections.Generic;
     using UnityEngine;
     using VexDesigner.InputSources;
     using VexDesigner.UI;
@@ -128,6 +129,9 @@ namespace VexDesigner.Parts
         /// <summary>The hole under the crosshair that the carried one will meet.</summary>
         private HoleHit snapTarget;
 
+        /// <summary>Where the carried hole would thread onto the screw under the crosshair.</summary>
+        private NutSeating screwSeat;
+
         private bool carryingByHole;
         private bool rotatingAboutHole;
 
@@ -145,8 +149,7 @@ namespace VexDesigner.Parts
         private Vector3 holeCarryStartPosition;
         private Quaternion holeCarryStartRotation;
 
-        private readonly System.Collections.Generic.List<Collider> suspendedColliders =
-            new System.Collections.Generic.List<Collider>();
+        private readonly List<Collider> suspendedColliders = new List<Collider>();
 
         // --- Fitting a screw or a nut ---------------------------------------
 
@@ -165,8 +168,6 @@ namespace VexDesigner.Parts
                  "Turns to the warning colour when the screw is too short.")]
         [SerializeField] private Color nutSeatColour = new Color(0.4f, 1f, 0.5f);
 
-        [SerializeField] private Color tooShortColour = new Color(1f, 0.3f, 0.25f);
-
         /// <summary>True while a part is being positioned by one of its holes.</summary>
         public bool IsCarryingByHole => carryingByHole;
 
@@ -174,7 +175,7 @@ namespace VexDesigner.Parts
         public bool IsFittingFastener => fastenerPreview;
 
         /// <summary>True when the carried hole is lined up on a destination.</summary>
-        public bool HoleIsSnapped => carryingByHole && snapTarget.IsValid;
+        public bool HoleIsSnapped => carryingByHole && HasSnapTarget;
 
         /// <summary>True while the rotation dial is up.</summary>
         public bool IsRotatingAboutHole => rotatingAboutHole;
@@ -565,7 +566,7 @@ namespace VexDesigner.Parts
             float delta = Mathf.DeltaAngle(lastCarrierYaw, yaw);
             lastCarrierYaw = yaw;
 
-            if (snapTarget.IsValid || rotatingAboutHole || Mathf.Abs(delta) < 0.001f)
+            if (HasSnapTarget || rotatingAboutHole || Mathf.Abs(delta) < 0.001f)
             {
                 return;
             }
@@ -581,7 +582,17 @@ namespace VexDesigner.Parts
         /// </summary>
         private void UpdateSnapTarget()
         {
-            bool wasSnapped = snapTarget.IsValid;
+            bool wasSnapped = HasSnapTarget;
+
+            // A screw first. Threading a part onto one is a more specific
+            // intention than lining its hole up with another hole, and if a
+            // screw is what the crosshair is on then it is what was meant.
+            if (TryScrewSeat())
+            {
+                return;
+            }
+
+            screwSeat = default;
 
             var holes = RaycastFor<PartHoles>(out _);
             bool farSide = actions != null && actions.FarSideHeld;
@@ -614,6 +625,63 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
+        /// Threads the carried hole onto the screw under the crosshair, if
+        /// there is one.
+        ///
+        /// The part slides up the shank until it meets metal, exactly as a nut
+        /// does - so looking near the head of a screw already through a plate
+        /// brings the held hole flush against that plate, which is where it
+        /// would physically end up.
+        /// </summary>
+        private bool TryScrewSeat()
+        {
+            var screw = RaycastNearest<PlacedScrew>();
+
+            if (screw == null || carriedHoles == null || !carriedHoles.HasHoles)
+            {
+                return false;
+            }
+
+            // The held part is in the hand, not on the screw, so it must not
+            // count as something the screw already passes through.
+            screw.RecomputePasses(carriedHoles);
+
+            float thickness = carriedHoles.Holes.holes[carriedHole.HoleIndex].depth;
+            NutSeating seat = FastenerFitting.FindSeating(screw, thickness, pointer.AimRay);
+
+            if (!seat.IsValid || !seat.Fits)
+            {
+                return false;
+            }
+
+            if (!screwSeat.IsValid)
+            {
+                // Coming onto a screw from free carry, the roll starts where the
+                // part already is rather than snapping to an arbitrary zero.
+                holeRoll = 0f;
+            }
+
+            screwSeat = seat;
+            snapTarget = default;
+
+            snapMarker ??= HoleHighlighter.Create("SnapTargetHole", snapColour);
+            snapMarker.SetColour(snapColour);
+            snapMarker.Show(new HoleHit
+            {
+                Part = carriedHoles,
+                Face = carriedHole.Face,
+                Shape = carriedHole.Shape,
+                WorldPosition = seat.WorldPosition,
+                WorldNormal = seat.WorldNormal,
+            });
+
+            return true;
+        }
+
+        /// <summary>True while the carried hole has somewhere to go.</summary>
+        private bool HasSnapTarget => snapTarget.IsValid || screwSeat.IsValid;
+
+        /// <summary>
         /// Puts the part where the current state says it goes: on the join if
         /// there is one, hanging off the crosshair if not.
         /// </summary>
@@ -621,7 +689,25 @@ namespace VexDesigner.Parts
         {
             Transform moving = carried.transform;
 
-            if (snapTarget.IsValid)
+            if (screwSeat.IsValid)
+            {
+                // Turn the held hole to look back up the screw, the way it
+                // would if it had been slid on from the free end.
+                Vector3 axis = screwSeat.WorldNormal;
+                Vector3 current = (targetRotation * carriedHole.Face.localNormal).normalized;
+
+                Quaternion rotation = Quaternion.FromToRotation(current, axis) * targetRotation;
+                rotation = Quaternion.AngleAxis(holeRoll, axis) * rotation;
+
+                Vector3 offset = rotation *
+                    Vector3.Scale(carriedHole.Face.localPosition, moving.lossyScale);
+
+                moving.SetPositionAndRotation(screwSeat.WorldPosition - offset, rotation);
+
+                ringZeroDirection = Vector3.ProjectOnPlane(
+                    screwSeat.Screw.transform.right, axis).normalized;
+            }
+            else if (snapTarget.IsValid)
             {
                 // Re-resolve the destination every frame. The part it belongs
                 // to can be moved by something else - another player, later -
@@ -661,6 +747,8 @@ namespace VexDesigner.Parts
                 carriedBody.rotation = moving.rotation;
             }
 
+            carriedInstance?.Group?.UpdateFollow();
+
             UpdateRotationRing();
         }
 
@@ -680,9 +768,9 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            if (!snapTarget.IsValid)
+            if (!HasSnapTarget)
             {
-                MessageBanner.Warn("Hold the hole against another one first");
+                MessageBanner.Warn("Hold the hole against something first");
                 return;
             }
 
@@ -795,15 +883,22 @@ namespace VexDesigner.Parts
 
         private void UpdateRotationRing()
         {
-            if (!rotatingAboutHole || !snapTarget.IsValid)
+            if (!rotatingAboutHole || !HasSnapTarget)
             {
                 rotationRing?.Hide();
                 return;
             }
 
+            Vector3 centre = screwSeat.IsValid
+                ? screwSeat.WorldPosition
+                : snapTarget.WorldPosition;
+
+            Vector3 axis = screwSeat.IsValid
+                ? screwSeat.WorldNormal
+                : snapTarget.WorldNormal;
+
             rotationRing ??= HoleRotationRing.Create(snapColour);
-            rotationRing.Show(
-                snapTarget.WorldPosition, snapTarget.WorldNormal, ringZeroDirection, holeRoll);
+            rotationRing.Show(centre, axis, ringZeroDirection, holeRoll);
         }
 
         /// <summary>
@@ -813,7 +908,9 @@ namespace VexDesigner.Parts
         private void EndHoleCarry(bool commit)
         {
             GameObject placed = carried;
-            bool mated = commit && snapTarget.IsValid;
+            bool mated = commit && HasSnapTarget;
+            bool onScrew = commit && screwSeat.IsValid;
+            PlacedScrew seatedOn = screwSeat.Screw;
 
             if (!commit && placed != null)
             {
@@ -827,6 +924,7 @@ namespace VexDesigner.Parts
             StopHoleRotation();
 
             snapTarget = default;
+            screwSeat = default;
             snapMarker?.Hide();
             fastenerMarker?.Hide();
             fastenerPreview = false;
@@ -850,6 +948,13 @@ namespace VexDesigner.Parts
             carriedHoles = null;
             carriedHole = default;
             holeRoll = 0f;
+
+            // A part threaded onto a screw changes what that screw holds, so
+            // the assembly has to be worked out again.
+            if (onScrew && seatedOn != null)
+            {
+                seatedOn.Refresh();
+            }
         }
 
         /// <summary>
@@ -959,20 +1064,54 @@ namespace VexDesigner.Parts
                 return;
             }
 
+            // Taking a nut off is how a build comes apart. Everything else
+            // picks up the whole assembly; a nut picks up only itself, and
+            // whatever it alone was holding falls apart behind it.
+            //
+            // Only what it *alone* held. A part with four screws through it
+            // stays put when one nut comes off, which is the whole reason the
+            // grouping is derived from the fasteners rather than remembered.
+            LoosenNut(existing.GetComponent<PartInstance>());
+
             var instance = existing.GetComponent<PartInstance>();
+            PartDefinition existingDefinition = instance == null ? null : instance.Definition;
 
             // A frozen part stays frozen when grabbed - only K releases it -
             // but it is still fully movable while held. See AttachToHand.
             Vector3 grabPoint = hasLastHit ? lastHitPoint : existing.transform.position;
+
+            // A screw is held by its head, wherever it was clicked. Held by a
+            // point halfway down the shank it hangs at an angle and has to be
+            // aimed by its middle, when the head is the part you actually put
+            // against the metal - and the end that has to line up with a hole.
+            if (existingDefinition != null && existingDefinition.IsScrew)
+            {
+                grabPoint = existing.transform.TransformPoint(
+                    existingDefinition.fastener.localSeatPoint);
+            }
             float distance = hasLastHit
                 ? Mathf.Clamp(lastHitDistance, minCarryDistance, maxCarryDistance)
                 : Vector3.Distance(pointer.AimRay.origin, existing.transform.position);
 
-            AttachToHand(
-                existing,
-                instance != null ? instance.Definition : null,
-                distance,
-                grabPoint);
+            AttachToHand(existing, existingDefinition, distance, grabPoint);
+        }
+
+        /// <summary>
+        /// Rebuilds the assembly as though the nut about to be picked up were
+        /// already off the screw.
+        ///
+        /// Done before the grab rather than after, because the grab reads the
+        /// group to decide what comes with it. Rebuilding afterwards would pick
+        /// the whole robot up by the nut and only then let go of it.
+        /// </summary>
+        private static void LoosenNut(PartInstance instance)
+        {
+            if (instance == null || instance.Definition == null || !instance.Definition.IsNut)
+            {
+                return;
+            }
+
+            Assembly.Rebuild(instance);
         }
 
         private void AttachToHand(
@@ -1026,6 +1165,17 @@ namespace VexDesigner.Parts
             carriedCollider = go.GetComponent<Collider>();
 
             carriedInstance?.Group?.SetGrabbed(true);
+
+            // The rest of the assembly rides on this part. Without it a bolted
+            // robot picked up by one C-channel leaves the rest of itself on the
+            // bench - the parts knew they were a group, but nothing ever asked
+            // the group to move.
+            carriedInstance?.Group?.BeginFollow(carriedInstance);
+
+            // And none of it shoves the player around. Walking into what you
+            // are carrying is the commonest way to knock a build over, and it
+            // is never what anyone meant to do.
+            IgnorePlayerCollision(true);
 
             // Whatever this part was supporting has to be told it lost its
             // support, or a stack hangs in mid-air.
@@ -1166,12 +1316,14 @@ namespace VexDesigner.Parts
             // mid-air.
             //
             // Passes only. Grouping happens on the click, not on the hover.
-            screw.RecomputePasses();
+            screw.RecomputePasses(carried.GetComponent<PartHoles>());
 
             NutSeating seating = FastenerFitting.FindNutSeating(
                 screw, definition, pointer.AimRay);
 
-            if (!seating.IsValid)
+            // No thread left for it. Not an error - there is simply nowhere
+            // on this screw for this nut, so it stays in the hand.
+            if (!seating.IsValid || !seating.Fits)
             {
                 return EndFastenerPreview();
             }
@@ -1187,11 +1339,8 @@ namespace VexDesigner.Parts
 
             PlaceGhost(position, rotation);
 
-            // The marker is the only warning that a nut will not fit before the
-            // click that refuses it, so it changes colour rather than merely
-            // appearing.
             fastenerMarker ??= HoleHighlighter.Create("FastenerSeat", nutSeatColour);
-            fastenerMarker.SetColour(seating.Fits ? nutSeatColour : tooShortColour);
+            fastenerMarker.SetColour(nutSeatColour);
 
             fastenerMarker.Show(new HoleHit
             {
@@ -1279,6 +1428,8 @@ namespace VexDesigner.Parts
                 carriedBody.position = position;
                 carriedBody.rotation = rotation;
             }
+
+            carriedInstance?.Group?.UpdateFollow();
         }
 
         /// <summary>
@@ -1287,15 +1438,6 @@ namespace VexDesigner.Parts
         /// </summary>
         private void CommitFastener()
         {
-            if (nutTarget.IsValid && !nutTarget.Fits)
-            {
-                // Refused rather than fitted. A nut hanging off the end of a
-                // screw holds nothing, and silently placing one would leave a
-                // build that looks fastened and is not.
-                MessageBanner.Warn("Screw is too short — the nut does not reach");
-                return;
-            }
-
             GameObject placed = carried;
             PlacedScrew screw = nutTarget.Screw;
             NutSeating seating = nutTarget;
@@ -1321,15 +1463,15 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            var instance = placed.GetComponent<PartInstance>();
-
-            if (screw != null && instance != null)
+            if (screw != null)
             {
-                screw.AttachNut(instance, seating.Distance);
+                // Nothing to record. The nut is now sitting on the screw, and
+                // the screw finds it there.
+                Assembly.Rebuild();
 
                 MessageBanner.Info(seating.InGap
                     ? "Nut fitted in the gap — everything above it is joined"
-                    : "Nut fitted — the stack is joined");
+                    : "Nut tightened — the stack is joined");
 
                 return;
             }
@@ -1409,6 +1551,8 @@ namespace VexDesigner.Parts
 
             DriveRotation();
             DrivePosition();
+
+            carriedInstance?.Group?.UpdateFollow();
         }
 
         /// <summary>
@@ -1566,6 +1710,14 @@ namespace VexDesigner.Parts
             PartGroup group = carriedInstance?.Group;
             float heldAt = carryDistance;
 
+            IgnorePlayerCollision(false);
+
+            // Back in the world, so back in the graph. A nut set down on the
+            // screw it came off grips again, without anything having tracked
+            // that it was ever removed.
+            bool wasNut = carriedDefinition != null && carriedDefinition.IsNut;
+
+            group?.EndFollow();
             group?.SetGrabbed(false);
             group?.WakeNeighbours();
 
@@ -1576,6 +1728,11 @@ namespace VexDesigner.Parts
             carriedDefinition = null;
 
             interactionLock.CameraOrbitLocked = false;
+
+            if (wasNut)
+            {
+                Assembly.Rebuild();
+            }
 
             if (definition != null && placed != null)
             {
@@ -1675,6 +1832,40 @@ namespace VexDesigner.Parts
             }
 
             return nearest == null ? null : nearest.GetComponentInParent<T>();
+        }
+
+        /// <summary>
+        /// Stops the player and what they are holding from pushing each other.
+        ///
+        /// Both directions matter. A carried part driven into the player's
+        /// capsule gets shoved aside and ends up floating off the crosshair;
+        /// and a player who walks forward into a held part is pushed back by
+        /// their own hands, which feels like the controls have stopped working.
+        /// </summary>
+        private void IgnorePlayerCollision(bool ignore)
+        {
+            Collider self = GetComponent<Collider>()
+                ?? GetComponentInParent<Collider>();
+
+            PartGroup group = carriedInstance?.Group;
+
+            if (self == null || group == null)
+            {
+                return;
+            }
+
+            foreach (PartInstance part in group.Members)
+            {
+                if (part == null)
+                {
+                    continue;
+                }
+
+                foreach (Collider collider in part.GetComponentsInChildren<Collider>())
+                {
+                    Physics.IgnoreCollision(collider, self, ignore);
+                }
+            }
         }
 
         private bool IsCarriedCollider(Collider collider)

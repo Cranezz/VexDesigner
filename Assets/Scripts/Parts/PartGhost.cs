@@ -34,12 +34,17 @@ namespace VexDesigner.Parts
 
             if (ghosted)
             {
+                // The border comes off first, or it would be captured as part
+                // of the original set and put back twice.
+                GetComponent<PartOutline>()?.Hide();
+
                 Capture();
                 Apply(GhostMaterial());
             }
             else
             {
                 Restore();
+                GetComponent<PartOutline>()?.Reapply();
             }
         }
 

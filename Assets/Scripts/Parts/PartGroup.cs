@@ -215,6 +215,116 @@ namespace VexDesigner.Parts
             }
         }
 
+        /// <summary>
+        /// Locks the rest of the group onto one member, so moving that member
+        /// moves the assembly.
+        ///
+        /// Needed because carrying is driven through a single Rigidbody. Before
+        /// this, a bolted-together robot picked up by one of its C-channels
+        /// left the rest of itself behind - the parts were in a group, but
+        /// nothing ever asked the group to move.
+        ///
+        /// The followers are pinned rather than simulated. Two dynamic bodies
+        /// held rigidly together fight each other through the solver, and the
+        /// result shakes itself apart; the leader collides on the assembly's
+        /// behalf and the rest simply keep their places relative to it.
+        /// </summary>
+        public void BeginFollow(PartInstance leader)
+        {
+            follow.Clear();
+
+            if (leader == null)
+            {
+                return;
+            }
+
+            followLeader = leader;
+            Transform lead = leader.transform;
+
+            foreach (PartInstance part in members)
+            {
+                if (part == null || part == leader)
+                {
+                    continue;
+                }
+
+                var body = part.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.isKinematic = true;
+                    body.linearVelocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
+                }
+
+                follow.Add(new Follower
+                {
+                    part = part,
+                    localPosition = lead.InverseTransformPoint(part.transform.position),
+                    localRotation = Quaternion.Inverse(lead.rotation) * part.transform.rotation,
+                });
+            }
+        }
+
+        /// <summary>Puts the followers back where the leader says they go.</summary>
+        public void UpdateFollow()
+        {
+            if (followLeader == null)
+            {
+                return;
+            }
+
+            Transform lead = followLeader.transform;
+
+            foreach (Follower follower in follow)
+            {
+                if (follower.part == null)
+                {
+                    continue;
+                }
+
+                Vector3 position = lead.TransformPoint(follower.localPosition);
+                Quaternion rotation = lead.rotation * follower.localRotation;
+
+                follower.part.transform.SetPositionAndRotation(position, rotation);
+
+                var body = follower.part.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.position = position;
+                    body.rotation = rotation;
+                }
+            }
+        }
+
+        public void EndFollow()
+        {
+            foreach (Follower follower in follow)
+            {
+                var body = follower.part == null
+                    ? null
+                    : follower.part.GetComponent<Rigidbody>();
+
+                if (body != null)
+                {
+                    body.isKinematic = IsFrozen;
+                    body.useGravity = !IsFrozen;
+                }
+            }
+
+            follow.Clear();
+            followLeader = null;
+        }
+
+        private struct Follower
+        {
+            public PartInstance part;
+            public Vector3 localPosition;
+            public Quaternion localRotation;
+        }
+
+        private readonly List<Follower> follow = new List<Follower>();
+        private PartInstance followLeader;
+
         /// <summary>Centre of the group's rendered bounds.</summary>
         public Vector3 GetCentre()
         {

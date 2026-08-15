@@ -21,10 +21,14 @@ namespace VexDesigner.Parts
     /// </summary>
     public sealed class Highlightable : MonoBehaviour
     {
-        [SerializeField] private Color highlightColour = new Color(0.18f, 0.52f, 1f);
+        [Tooltip("Hover colour. White, so hovering *lightens* the part rather " +
+                 "than tinting it - the point is to say which part is under the " +
+                 "crosshair, not to recolour it.")]
+        [SerializeField] private Color highlightColour = Color.white;
 
-        [Tooltip("Emission strength. Above 1 the glow blooms in HDR.")]
-        [SerializeField] private float intensity = 1.6f;
+        [Tooltip("Emission strength. Kept low: a hover should read as the part " +
+                 "being a shade brighter, not as it lighting up.")]
+        [SerializeField] private float intensity = 0.45f;
 
         [Tooltip("Seconds to fade in and out. Instant switching reads as a " +
                  "flicker when the cursor crosses several objects quickly.")]
@@ -32,9 +36,15 @@ namespace VexDesigner.Parts
 
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
-        [Tooltip("Colour shown while a part is pinned in mid-air. Distinct from " +
-                 "the hover colour so the two states are never confused.")]
-        [SerializeField] private Color pinnedColour = new Color(0.15f, 0.45f, 1f);
+        [Tooltip("Border colour for a part pinned in mid-air. Blue, and drawn " +
+                 "as an outline rather than a glow, so it cannot be mistaken " +
+                 "for the white wash of a hover.")]
+        [SerializeField] private Color pinnedColour = new Color(0.15f, 0.5f, 1f);
+
+        [Tooltip("Border width in pixels, held constant on screen.")]
+        [SerializeField] private float outlineThickness = 3f;
+
+        private PartOutline outline;
 
         private Renderer[] renderers;
         private MaterialPropertyBlock block;
@@ -117,6 +127,7 @@ namespace VexDesigner.Parts
             }
 
             pinned = value;
+            ApplyOutline();
             Apply();
         }
 
@@ -155,16 +166,19 @@ namespace VexDesigner.Parts
             // The three states compose by taking the brightest channel rather
             // than replacing each other, so a held frozen part reads as both
             // rather than the newer state hiding the older one.
+            // Hover and grab still compose by taking the brightest channel, so
+            // a held part that is also under the crosshair reads as both.
+            //
+            // Frozen is deliberately not in this mix any more. It was a blue
+            // glow competing with a blue-white one, and on a pale aluminium
+            // part the difference between "pinned" and "hovered" came down to
+            // a shade. A border is a different *kind* of mark, so the two can
+            // be told apart at a glance and can be shown at once.
             Color emission = highlightColour * (intensity * current * HoverScale);
-
-            if (pinned)
-            {
-                emission = Brightest(emission, pinnedColour * (intensity * 0.55f));
-            }
 
             if (grabbed)
             {
-                emission = Brightest(emission, grabbedColour * (intensity * 0.45f));
+                emission = Brightest(emission, grabbedColour * (intensity * 0.9f));
             }
 
             for (int i = 0; i < renderers.Length; i++)
@@ -181,6 +195,24 @@ namespace VexDesigner.Parts
             }
         }
 
+        /// <summary>Puts the frozen border up or takes it down.</summary>
+        private void ApplyOutline()
+        {
+            if (outline == null)
+            {
+                outline = GetComponent<PartOutline>() ?? gameObject.AddComponent<PartOutline>();
+            }
+
+            if (pinned)
+            {
+                outline.Show(pinnedColour, outlineThickness);
+            }
+            else
+            {
+                outline.Hide();
+            }
+        }
+
         private static Color Brightest(Color a, Color b)
         {
             return new Color(
@@ -193,6 +225,7 @@ namespace VexDesigner.Parts
             // surprisingly common source of "stuck highlight" bugs.
             current = 0f;
             target = 0f;
+
             if (renderers != null)
             {
                 Apply();

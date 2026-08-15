@@ -45,8 +45,9 @@ MonoBehaviour:
         width: 0.003661663
       depth: 0.0047625
       type: 1
+      shape: 1
     measuredPitchInches: 0
-    generatedAt: 2026-08-13 22:26
+    generatedAt: 2026-08-14 19:28
   colour: {r: 0.68, g: 0.7, b: 0.74, a: 1}
   smoothness: 0.55
   metallic: 0.85

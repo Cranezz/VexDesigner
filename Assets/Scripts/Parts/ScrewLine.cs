@@ -67,7 +67,7 @@ namespace VexDesigner.Parts
         /// <param name="ignore">The screw's own part, which is never a target.</param>
         public static void Gather(
             Vector3 seat, Vector3 direction, float length,
-            List<ScrewPass> results, PartHoles ignore = null)
+            List<ScrewPass> results, PartHoles ignore = null, PartHoles alsoIgnore = null)
         {
             results.Clear();
 
@@ -79,7 +79,8 @@ namespace VexDesigner.Parts
             {
                 PartHoles part = parts[p];
 
-                if (part == null || part == ignore || !part.HasHoles)
+                if (part == null || part == ignore || part == alsoIgnore ||
+                    !part.HasHoles)
                 {
                     continue;
                 }

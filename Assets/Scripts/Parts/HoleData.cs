@@ -60,6 +60,23 @@ namespace VexDesigner.Parts
     }
 
     /// <summary>
+    /// What a hole looks like.
+    ///
+    /// VEX structure is drilled as rounded squares so a square shaft can pass
+    /// through, and that shape is what makes the grid recognisable. A nut's
+    /// bore is a plain tapped circle. Marking a round hole with a square is a
+    /// small lie that reads immediately as wrong.
+    /// </summary>
+    public enum HoleShape
+    {
+        /// <summary>Rounded square. The VEX structural hole.</summary>
+        Square,
+
+        /// <summary>Plain circle. Nut bores, and anything simply drilled.</summary>
+        Round,
+    }
+
+    /// <summary>
     /// A hole passing through a part: two faces, and the material between them.
     /// </summary>
     [Serializable]
@@ -73,6 +90,9 @@ namespace VexDesigner.Parts
 
         [Tooltip("What happens when a screw reaches this hole. See HoleType.")]
         public HoleType type;
+
+        [Tooltip("Rounded square for VEX structure, circle for a drilled bore.")]
+        public HoleShape shape;
 
         /// <summary>True if a screw reaching this hole forms an assembly.</summary>
         public bool Grips => type == HoleType.Threaded;

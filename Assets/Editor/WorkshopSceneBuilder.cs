@@ -328,8 +328,18 @@ namespace VexDesigner.EditorTools
             player.transform.rotation = Quaternion.Euler(0f, GarageRoomBuilder.PlayerSpawnYaw, 0f);
 
             var controller = player.AddComponent<CharacterController>();
-            controller.height = In(68f);
-            controller.radius = In(9f);
+            // Deliberately much smaller than a person.
+            //
+            // An 18-inch-wide capsule keeps the player a hand's breadth away
+            // from everything, which is exactly the wrong distance for work
+            // done at arm's length on quarter-inch holes - you cannot get your
+            // eye near the join you are trying to judge. A narrow body lets the
+            // player stand right against the bench.
+            //
+            // Nothing here needs a realistic collider: there is one character,
+            // no combat, and nothing that has to squeeze through a doorway.
+            controller.height = In(60f);
+            controller.radius = In(4f);
             controller.center = new Vector3(0f, In(34f), 0f);
 
             // Generous step and slope so the player is not stopped by the
@@ -736,6 +746,7 @@ namespace VexDesigner.EditorTools
             {
                 "VexDesigner/GizmoOverlay",
                 "VexDesigner/GizmoTransparent",
+                "VexDesigner/PartOutline",
             };
 
             foreach (string name in required)
