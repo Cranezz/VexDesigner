@@ -1,5 +1,6 @@
 namespace VexDesigner.Parts
 {
+    using System.Collections.Generic;
     using UnityEngine;
 
     /// <summary>
@@ -79,10 +80,9 @@ namespace VexDesigner.Parts
             // normals, not aligned ones - that is what "flat against each
             // other" means for sheet metal; aligning them would bury one part
             // inside the other.
-            Vector3 moverNormal = (freeRotation * moverFace.localNormal).normalized;
-            rotation = Quaternion.FromToRotation(moverNormal, -axis) * freeRotation;
-
-            rotation = SnapRoll(rotation, target, rollSnapDegrees, out zeroDirection);
+            rotation = SquareOnto(
+                freeRotation, moverFace.localNormal, target, rollSnapDegrees,
+                out zeroDirection);
 
             if (!Mathf.Approximately(extraRollDegrees, 0f))
             {
@@ -127,93 +127,138 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Rolls the part about the mating axis until it sits square with the
-        /// part it is joining, to the nearest quarter turn.
+        /// Turns the part so its hole faces the target's and its edges line up
+        /// with the target's edges.
         ///
-        /// Without this the parts meet at whatever angle they happened to be
-        /// held at, which is almost never wanted - two C-channels bolted
-        /// together are square to each other. Snapping to quarter turns gives
-        /// that for free while still allowing the four sensible orientations,
-        /// and anything else is reached by turning the dial.
+        /// Two attempts at this were wrong in instructive ways, and both were
+        /// wrong about the *swing* rather than the twist.
         ///
-        /// Measured by taking the rotation *between* the two parts and pulling
-        /// out its twist about the mating axis, rather than by comparing a
-        /// chosen pair of axis vectors. Comparing vectors was the first attempt
-        /// and it does not hold up: the part's chosen reference axis is often
-        /// nearly parallel to the mating axis - which is the normal case when
-        /// bolting to a flange - and its projection onto the mating plane is
-        /// then a very short vector whose direction is mostly rounding error.
-        /// The angle it gave was arbitrary, which is why holding shift never
-        /// quite landed the part square with the one it was joining.
+        /// Making the hole face the right way is a rotation with one degree of
+        /// freedom left over, and the obvious way to get there -
+        /// FromToRotation onto the mating axis - takes the shortest arc. The
+        /// shortest arc turns about whatever in-plane axis happens to be
+        /// nearest, which is almost never one of the part's own edges. Removing
+        /// the leftover twist afterwards, which is what the previous version
+        /// did, cannot fix that: the part is already tilted about an arbitrary
+        /// axis, and twisting it about the mating axis leaves it tilted.
         ///
-        /// A twist has no such degenerate case. Zero twist means the part is
-        /// oriented exactly as the one it meets, apart from the turn that makes
-        /// them face each other, so the snap increments count from a position
-        /// that actually means something.
+        /// So the answer is not to correct a rotation but to choose one. A part
+        /// square with another is at one of the twenty-four orientations of a
+        /// cube relative to it. Only some of those point the hole the right way,
+        /// and among those the nearest to how the part is being held is the one
+        /// the user meant. Picking from that set means "square" is true by
+        /// construction rather than by arithmetic that might not quite land.
         /// </summary>
-        private static Quaternion SnapRoll(
-            Quaternion rotation, HoleHit target, float snapDegrees, out Vector3 zeroDirection)
+        private static Quaternion SquareOnto(
+            Quaternion freeRotation, Vector3 localNormal, HoleHit target,
+            float snapDegrees, out Vector3 zeroDirection)
         {
             Vector3 axis = target.WorldNormal.normalized;
-            Transform reference = target.Part.transform;
+            Quaternion frame = target.Part.transform.rotation;
 
-            // The dial's zero mark: a direction fixed in the target part, so
-            // the reading means "this far from square with that part". Which of
-            // the target's own axes is used does not matter as long as it is
-            // stable, so the one that lies flattest in the mating plane wins -
-            // the same near-parallel projection that broke the old comparison
-            // would only make the mark jitter here.
-            zeroDirection = FlattestAxis(reference.rotation, axis);
+            zeroDirection = FlattestAxis(frame, axis);
 
-            float twist = TwistAbout(rotation * Quaternion.Inverse(reference.rotation), axis);
+            // Opposed normals, not aligned ones - that is what "flat against
+            // each other" means for sheet metal.
+            Vector3 wanted = -axis;
 
-            // Turn back by the twist to sit square, then forward again by the
-            // nearest whole increment.
-            float correction = -twist;
+            Vector3 held = (freeRotation * localNormal).normalized;
+            Quaternion loose = Quaternion.FromToRotation(held, wanted) * freeRotation;
 
-            if (snapDegrees > 0f)
+            if (snapDegrees <= 0f)
             {
-                correction = (Mathf.Round(twist / snapDegrees) * snapDegrees) - twist;
+                return loose;
             }
 
-            return Quaternion.AngleAxis(correction, axis) * rotation;
+            Quaternion[] cube = CubeRotations();
+
+            Quaternion best = loose;
+            float bestAngle = float.MaxValue;
+            bool found = false;
+
+            for (int i = 0; i < cube.Length; i++)
+            {
+                Quaternion candidate = frame * cube[i];
+
+                // Does this orientation point the hole at the target at all?
+                if (Vector3.Dot(candidate * localNormal, wanted) < 0.995f)
+                {
+                    continue;
+                }
+
+                // Nearest to how the part is actually being held, so the four
+                // ways round it could sit are decided by the user rather than
+                // by whichever was enumerated first.
+                float angle = Quaternion.Angle(candidate, freeRotation);
+
+                if (angle < bestAngle)
+                {
+                    bestAngle = angle;
+                    best = candidate;
+                    found = true;
+                }
+            }
+
+            if (!found)
+            {
+                // The hole's normal does not run along one of the part's own
+                // axes - a hole on a slanted face. Nothing here is square to
+                // anything, so the loose alignment is the honest answer.
+                return loose;
+            }
+
+            // A detected normal can be a fraction of a degree off true, which
+            // would leave the faces very slightly apart. Correcting it costs
+            // less squareness than that gap costs contact.
+            return Quaternion.FromToRotation(best * localNormal, wanted) * best;
         }
 
         /// <summary>
-        /// How far <paramref name="rotation"/> turns about
-        /// <paramref name="axis"/>, ignoring any tilt away from it.
-        ///
-        /// The swing-twist decomposition: a quaternion's vector part projected
-        /// onto the axis, kept with the original scalar part, is exactly the
-        /// component of the rotation that spins about that axis.
+        /// The twenty-four ways a cube can sit: every rotation that maps a set
+        /// of axes onto itself, and so every orientation in which two
+        /// rectangular parts are square with each other.
         /// </summary>
-        private static float TwistAbout(Quaternion rotation, Vector3 axis)
+        private static Quaternion[] CubeRotations()
         {
-            var vector = new Vector3(rotation.x, rotation.y, rotation.z);
-            Vector3 projected = Vector3.Project(vector, axis);
-
-            var twist = new Quaternion(projected.x, projected.y, projected.z, rotation.w);
-
-            // A half-turn about something perpendicular to the axis leaves
-            // nothing to project: the rotation has no twist component at all.
-            if (twist.x * twist.x + twist.y * twist.y +
-                twist.z * twist.z + twist.w * twist.w < 1e-12f)
+            if (cubeRotations != null)
             {
-                return 0f;
+                return cubeRotations;
             }
 
-            twist.Normalize();
-            twist.ToAngleAxis(out float angle, out Vector3 twistAxis);
+            var found = new List<Quaternion>(24);
 
-            if (angle > 180f)
+            for (int x = 0; x < 4; x++)
             {
-                angle -= 360f;
+                for (int y = 0; y < 4; y++)
+                {
+                    for (int z = 0; z < 4; z++)
+                    {
+                        var candidate = Quaternion.Euler(x * 90f, y * 90f, z * 90f);
+
+                        bool duplicate = false;
+
+                        for (int i = 0; i < found.Count; i++)
+                        {
+                            if (Quaternion.Angle(found[i], candidate) < 1f)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+
+                        if (!duplicate)
+                        {
+                            found.Add(candidate);
+                        }
+                    }
+                }
             }
 
-            // ToAngleAxis always reports a positive turn about *some* axis; if
-            // that axis came out reversed, the turn is the other way round.
-            return Vector3.Dot(twistAxis, axis) < 0f ? -angle : angle;
+            cubeRotations = found.ToArray();
+            return cubeRotations;
         }
+
+        private static Quaternion[] cubeRotations;
 
         /// <summary>
         /// Whichever of a frame's three axes lies most nearly in the plane

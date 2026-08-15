@@ -87,10 +87,7 @@ namespace VexDesigner.Parts
                 // Repaint immediately. Update only repaints while fading, so a
                 // change made once the glow has settled would otherwise not
                 // show until the next time the cursor moved on or off.
-                if (renderers != null)
-                {
-                    Apply();
-                }
+                Apply();
             }
         }
 
@@ -103,10 +100,25 @@ namespace VexDesigner.Parts
         /// </summary>
         public bool Interactable { get; set; } = true;
 
-        private void Awake()
+        /// <summary>
+        /// Resolved on first use rather than in Awake.
+        ///
+        /// Awake does not run for a component in a scene that is not playing,
+        /// so any editor tool that freezes a part - the fastener tests, for one
+        /// - reached straight past a null array. Lazily is also simply safer:
+        /// nothing here needs to happen before the first time it is asked for.
+        /// </summary>
+        private void Resolve()
         {
-            renderers = GetComponentsInChildren<Renderer>();
-            block = new MaterialPropertyBlock();
+            if (block == null)
+            {
+                block = new MaterialPropertyBlock();
+            }
+
+            if (renderers == null || renderers.Length == 0)
+            {
+                renderers = GetComponentsInChildren<Renderer>();
+            }
         }
 
         public void SetHighlighted(bool on)
@@ -163,6 +175,8 @@ namespace VexDesigner.Parts
 
         private void Apply()
         {
+            Resolve();
+
             // The three states compose by taking the brightest channel rather
             // than replacing each other, so a held frozen part reads as both
             // rather than the newer state hiding the older one.
@@ -225,11 +239,7 @@ namespace VexDesigner.Parts
             // surprisingly common source of "stuck highlight" bugs.
             current = 0f;
             target = 0f;
-
-            if (renderers != null)
-            {
-                Apply();
-            }
+            Apply();
         }
     }
 }

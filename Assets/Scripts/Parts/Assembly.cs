@@ -49,6 +49,11 @@ namespace VexDesigner.Parts
             IReadOnlyList<PartInstance> parts = PartInstance.All;
             IReadOnlyList<PlacedScrew> screws = PlacedScrew.All;
 
+            // Worked out again from scratch alongside the groups, for the same
+            // reason: a part that has left an assembly must start colliding
+            // with its old neighbours again.
+            CollisionExemptions.Clear();
+
             // Frozen-ness belongs to the user, not to the graph, so it has to
             // survive a rebuild. Remembered per part rather than per group,
             // since the groups are about to stop existing.
@@ -80,6 +85,21 @@ namespace VexDesigner.Parts
             {
                 part?.Group?.SetFrozen(true);
             }
+
+            // Parts bolted face to face overlap by a fraction of a millimetre,
+            // and a whole robot of those pushing apart at once is an assembly
+            // that shakes itself to pieces.
+            var seen = new HashSet<PartGroup>();
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                PartGroup group = parts[i] == null ? null : parts[i].Group;
+
+                if (group != null && group.Members.Count > 1 && seen.Add(group))
+                {
+                    CollisionExemptions.ExcuseWithin(group.Members);
+                }
+            }
         }
 
         /// <summary>
@@ -94,6 +114,22 @@ namespace VexDesigner.Parts
             }
 
             screw.RecomputePasses(held);
+
+            // A screw is *inside* the metal it passes through, and a C-channel's
+            // collider is the convex hull of its mesh - a solid block filling
+            // the channel. So a driven screw is buried an inch deep in a solid
+            // object, which the solver reads as a huge penetration and fires the
+            // screw out at speed. Excused whether or not anything is fastened,
+            // because the overlap is there either way.
+            var self = screw.GetComponent<PartInstance>();
+
+            foreach (ScrewPass pass in screw.Passes)
+            {
+                if (pass.Part != null)
+                {
+                    CollisionExemptions.ExcusePair(self, pass.Part.GetComponent<PartInstance>());
+                }
+            }
 
             float grip = screw.GripDepth();
 

@@ -42,6 +42,9 @@ namespace VexDesigner.EditorTools
             Case(ScrewTooShortForANut);
             Case(GroupingFormsAndComesApart);
             Case(TwoScrewsHoldWhenOneComesOff);
+            Case(MatedPartsSitSquare);
+            Case(FrozenSurvivesUngrouping);
+            Case(TightNutStillSeats);
 
             if (failures == 0)
             {
@@ -465,6 +468,195 @@ namespace VexDesigner.EditorTools
 
             nut = Spawn(nutDef, position, rotation, rubbish);
             Assembly.Rebuild();
+            return true;
+        }
+
+        /// <summary>
+        /// Mating two parts hole to hole must leave them square to each other,
+        /// from any starting orientation. If it does not, no amount of snapped
+        /// rotation afterwards can reach parallel.
+        /// </summary>
+        private static void MatedPartsSitSquare(List<GameObject> rubbish)
+        {
+            PartDefinition channelDef = Load("CCHL-2");
+
+            if (channelDef == null)
+            {
+                return;
+            }
+
+            GameObject fixedPart = Spawn(
+                channelDef, Vector3.zero, Quaternion.Euler(11f, 27f, 5f), rubbish);
+
+            HoleHit target = fixedPart.GetComponent<PartHoles>().FaceAt(3, false);
+
+            // Several awkward starting orientations. The case that broke the
+            // old code had the part's reference axis nearly along the mating
+            // axis, so these include near-degenerate angles rather than tidy
+            // ones.
+            var starts = new[]
+            {
+                Quaternion.identity,
+                Quaternion.Euler(0f, 43f, 0f),
+                Quaternion.Euler(89f, 12f, 3f),
+                Quaternion.Euler(0f, 0f, 91f),
+                Quaternion.Euler(178f, 4f, 87f),
+            };
+
+            GameObject mover = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            var moverHoles = mover.GetComponent<PartHoles>();
+
+            for (int i = 0; i < starts.Length; i++)
+            {
+                mover.transform.rotation = starts[i];
+                HoleHit held = moverHoles.FaceAt(0, false);
+
+                HoleMating.ComputePose(
+                    held.Face, starts[i], target, 90f, 0f, Vector3.one,
+                    out _, out Quaternion mated, out _);
+
+                True("mated square from start " + i,
+                    IsSquareWith(fixedPart.transform.rotation, mated));
+            }
+
+            // A snapped manual roll must keep it square, since the increment
+            // divides a quarter turn.
+            HoleHit again = moverHoles.FaceAt(0, false);
+            var rolls = new[] { 15f, 90f, 180f, 345f };
+
+            for (int i = 0; i < rolls.Length; i++)
+            {
+                HoleMating.ComputePose(
+                    again.Face, Quaternion.identity, target, 90f, rolls[i], Vector3.one,
+                    out _, out Quaternion rolled, out _);
+
+                bool square = IsSquareWith(fixedPart.transform.rotation, rolled);
+                bool shouldBeSquare = Mathf.Approximately(rolls[i] % 90f, 0f);
+
+                True("roll of " + rolls[i] + " degrees squares correctly",
+                    square == shouldBeSquare);
+            }
+        }
+
+        /// <summary>
+        /// Taking an assembly apart must not un-freeze what is left, or a
+        /// pinned build drops to the bench the moment a nut comes off.
+        /// </summary>
+        private static void FrozenSurvivesUngrouping(List<GameObject> rubbish)
+        {
+            if (!Stack(rubbish, out GameObject upper, out GameObject lower,
+                    out PlacedScrew screw, out GameObject nut, 0f))
+            {
+                return;
+            }
+
+            screw.GetComponent<PartInstance>().Group.SetFrozen(true);
+
+            True("the whole assembly is frozen",
+                upper.GetComponent<PartInstance>().IsFrozen &&
+                lower.GetComponent<PartInstance>().IsFrozen);
+
+            Assembly.Rebuild(nut.GetComponent<PartInstance>());
+
+            True("upper channel is still frozen after ungrouping",
+                upper.GetComponent<PartInstance>().IsFrozen);
+            True("lower channel is still frozen after ungrouping",
+                lower.GetComponent<PartInstance>().IsFrozen);
+            True("the screw is still frozen after ungrouping",
+                screw.GetComponent<PartInstance>().IsFrozen);
+        }
+
+        /// <summary>
+        /// A screw that only just protrudes should still take a nut.
+        /// </summary>
+        private static void TightNutStillSeats(List<GameObject> rubbish)
+        {
+            PartDefinition channelDef = Load("CCHL-2");
+            PartDefinition screwDef = Load("276-4990");   // 1/4 in
+            PartDefinition nutDef = Load("275-1028");     // hex, 0.122 in
+
+            if (channelDef == null || screwDef == null || nutDef == null)
+            {
+                return;
+            }
+
+            GameObject upper = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            HoleHit hole = upper.GetComponent<PartHoles>().FaceAt(0, false);
+
+            // A second wall flush against the first: two sixteenths of an inch
+            // used, an eighth left, and the nut wants 0.122 of it.
+            Vector3 down = -hole.WorldNormal * (0.0625f * InchesToMetres);
+            Spawn(channelDef, down, Quaternion.identity, rubbish);
+
+            PlacedScrew screw = DriveScrew(screwDef, hole, rubbish);
+            if (screw == null)
+            {
+                return;
+            }
+
+            Dump("tight stack", screw);
+
+            float used = 0f;
+            foreach (ScrewPass pass in screw.Passes)
+            {
+                used = Mathf.Max(used, pass.Exit);
+            }
+
+            float spare = (screw.Length - used) / InchesToMetres;
+
+            Debug.Log("[FastenerTests] tight nut: " + spare.ToString("0.0000") +
+                      " in spare, nut is " +
+                      nutDef.fastener.thicknessInches.ToString("0.0000") + " in.");
+
+            Ray aim = AimAt(screw, screw.Length * 0.99f);
+            NutSeating seating = FastenerFitting.FindNutSeating(screw, nutDef, aim);
+
+            True("a tight nut is still offered a seat", seating.IsValid);
+            True("and fitting is reported correctly",
+                seating.Fits == (spare >= nutDef.fastener.thicknessInches - 0.0001f));
+
+            if (!seating.Fits)
+            {
+                return;
+            }
+
+            FastenerFitting.NutPose(
+                nutDef, Quaternion.identity, seating, Vector3.one,
+                out Vector3 position, out Quaternion rotation);
+
+            Spawn(nutDef, position, rotation, rubbish);
+            Assembly.Rebuild();
+            screw.RecomputePasses();
+
+            Dump("tight stack with nut", screw);
+
+            True("a tight nut still registers as gripping", screw.GripDepth() >= 0f);
+        }
+
+        /// <summary>
+        /// True when two orientations differ only by whole quarter turns - the
+        /// parts are parallel, however they are laid out.
+        /// </summary>
+        private static bool IsSquareWith(Quaternion a, Quaternion b)
+        {
+            Quaternion difference = Quaternion.Inverse(a) * b;
+            var axes = new[] { Vector3.right, Vector3.up, Vector3.forward };
+
+            for (int i = 0; i < axes.Length; i++)
+            {
+                Vector3 turned = difference * axes[i];
+
+                // Each axis has to land on a signed unit axis: one component
+                // near one, the other two near zero.
+                float largest = Mathf.Max(
+                    Mathf.Abs(turned.x), Mathf.Max(Mathf.Abs(turned.y), Mathf.Abs(turned.z)));
+
+                if (largest < 0.999f)
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 

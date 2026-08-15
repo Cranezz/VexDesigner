@@ -339,7 +339,7 @@ namespace VexDesigner.EditorTools
             // Nothing here needs a realistic collider: there is one character,
             // no combat, and nothing that has to squeeze through a doorway.
             controller.height = In(60f);
-            controller.radius = In(4f);
+            controller.radius = In(2f);
             controller.center = new Vector3(0f, In(34f), 0f);
 
             // Generous step and slope so the player is not stopped by the

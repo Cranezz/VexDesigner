@@ -41,7 +41,8 @@ namespace VexDesigner.EditorTools
                     $"bounds {size.x:0.000} x {size.y:0.000} x {size.z:0.000} in, " +
                     $"{mesh.vertexCount} verts, {mesh.triangles.Length / 3} tris, " +
                     $"axis {definition.fastener.localAxis}, " +
-                    $"submeshes {mesh.subMeshCount}");
+                    $"submeshes {mesh.subMeshCount}, " +
+                    $"outline normals {(mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.TexCoord3) ? "baked" : "MISSING")}");
             }
         }
     }

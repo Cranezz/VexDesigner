@@ -37,7 +37,7 @@ namespace VexDesigner.EditorTools
         /// afterwards, leaving older ones silently on the old settings - the
         /// exact inconsistency this class exists to prevent.
         /// </summary>
-        public override uint GetVersion() => 1;
+        public override uint GetVersion() => 2;
 
         private void OnPreprocessModel()
         {
@@ -108,6 +108,85 @@ namespace VexDesigner.EditorTools
                 $"[Parts] Imported {System.IO.Path.GetFileName(assetPath)}  " +
                 $"{sizeInches.x:F3} x {sizeInches.y:F3} x {sizeInches.z:F3} in  " +
                 $"({filter.sharedMesh.triangles.Length / 3} tris)");
+
+            foreach (MeshFilter mesh in root.GetComponentsInChildren<MeshFilter>())
+            {
+                BakeOutlineNormals(mesh.sharedMesh);
+            }
+        }
+
+        /// <summary>
+        /// Stores a smoothed copy of each vertex's normal, for the outline
+        /// shader to push against.
+        ///
+        /// The rendering normals must stay split at hard edges or machined
+        /// corners round off into a soft blob - which is why the importer is
+        /// told to calculate them with a tight smoothing angle. But an outline
+        /// that extrudes along *split* normals tears itself open at every one
+        /// of those edges, and the gaps read as lines drawn across the middle
+        /// of the part: down the fold of a C-channel, around every hole. The
+        /// part looks like a wireframe rather than something with a border
+        /// round it.
+        ///
+        /// A second set of normals, averaged across every vertex sharing a
+        /// position, has no such seams. Both are kept: the split ones light the
+        /// part, the smooth ones shape its silhouette.
+        ///
+        /// Baked here rather than at runtime because it is per part type, never
+        /// changes, and costs a dictionary over every vertex - which is a
+        /// noticeable pause on a mesh of thirteen thousand triangles and would
+        /// otherwise be paid on the first frame a part was frozen.
+        /// </summary>
+        private static void BakeOutlineNormals(Mesh mesh)
+        {
+            if (mesh == null || !mesh.isReadable)
+            {
+                return;
+            }
+
+            Vector3[] vertices = mesh.vertices;
+            Vector3[] normals = mesh.normals;
+
+            if (normals == null || normals.Length != vertices.Length)
+            {
+                return;
+            }
+
+            // Grouped by rounded position, so vertices that a modeller split
+            // apart to hold a crease are recognised as the same corner. A
+            // hundredth of a millimetre: far below any real feature, far above
+            // the noise in a converted CAD file.
+            var averaged = new System.Collections.Generic.Dictionary<Vector3Int, Vector3>(
+                vertices.Length);
+
+            var keys = new Vector3Int[vertices.Length];
+
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vector3 v = vertices[i] * 100000f;
+                var key = new Vector3Int(
+                    Mathf.RoundToInt(v.x), Mathf.RoundToInt(v.y), Mathf.RoundToInt(v.z));
+
+                keys[i] = key;
+                averaged[key] = averaged.TryGetValue(key, out Vector3 sum)
+                    ? sum + normals[i]
+                    : normals[i];
+            }
+
+            var smooth = new System.Collections.Generic.List<Vector3>(vertices.Length);
+
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vector3 sum = averaged[keys[i]];
+
+                // A vertex whose normals cancel out - the tip of an infinitely
+                // thin sliver - has no meaningful average, so it keeps its own.
+                smooth.Add(sum.sqrMagnitude > 1e-8f ? sum.normalized : normals[i]);
+            }
+
+            // Channel 3: past anything the standard shaders read, so nothing
+            // else is disturbed by its presence.
+            mesh.SetUVs(3, smooth);
         }
     }
 }

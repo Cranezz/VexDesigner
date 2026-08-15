@@ -49,6 +49,12 @@ Shader "VexDesigner/PartOutline"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
+
+                // Smoothed normals, baked at import. See BakeOutlineNormals.
+                // Extruding along the *rendering* normals tears the border open
+                // at every hard edge, and the gaps read as lines drawn across
+                // the middle of the part rather than around it.
+                float3 smoothOS   : TEXCOORD3;
             };
 
             struct Varyings
@@ -66,15 +72,18 @@ Shader "VexDesigner/PartOutline"
                 Varyings output;
 
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
-
                 output.positionCS = TransformWorldToHClip(positionWS);
+
+                // Fall back to the rendering normal on a mesh that has not been
+                // baked, so an unprocessed part still gets a border - a seamed
+                // one, but visible.
+                float3 extrude = any(input.smoothOS) ? input.smoothOS : input.normalOS;
 
                 // Pushed out in clip space rather than along the normal in
                 // world space, which is what keeps the border a constant width
                 // on screen however far away the part is.
                 float3 normalCS = mul((float3x3)UNITY_MATRIX_VP,
-                                      mul((float3x3)UNITY_MATRIX_M, input.normalOS));
+                                      mul((float3x3)UNITY_MATRIX_M, extrude));
 
                 float2 offset = normalize(normalCS.xy);
                 offset *= _Thickness * 2.0 / _ScreenParams.xy;

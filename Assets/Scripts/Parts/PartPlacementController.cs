@@ -681,6 +681,16 @@ namespace VexDesigner.Parts
         /// <summary>True while the carried hole has somewhere to go.</summary>
         private bool HasSnapTarget => snapTarget.IsValid || screwSeat.IsValid;
 
+        /// <summary>Where the carried hole is coming to rest, either way.</summary>
+        private Vector3 SeatPosition => screwSeat.IsValid
+            ? screwSeat.WorldPosition
+            : snapTarget.WorldPosition;
+
+        /// <summary>The axis it turns about, either way.</summary>
+        private Vector3 SeatNormal => screwSeat.IsValid
+            ? screwSeat.WorldNormal
+            : snapTarget.WorldNormal;
+
         /// <summary>
         /// Puts the part where the current state says it goes: on the join if
         /// there is one, hanging off the crosshair if not.
@@ -800,15 +810,15 @@ namespace VexDesigner.Parts
         private void PlacePointerOnDial()
         {
             Camera cam = Camera.main;
-            if (cam == null || !snapTarget.IsValid)
+            if (cam == null || !HasSnapTarget)
             {
                 return;
             }
 
-            Vector3 radial = Quaternion.AngleAxis(holeRoll, snapTarget.WorldNormal)
+            Vector3 radial = Quaternion.AngleAxis(holeRoll, SeatNormal)
                 * ringZeroDirection.normalized;
 
-            Vector3 world = snapTarget.WorldPosition + (radial * HoleRotationRing.RadiusMetres);
+            Vector3 world = SeatPosition + (radial * HoleRotationRing.RadiusMetres);
             Vector3 screen = cam.WorldToScreenPoint(world);
 
             if (screen.z > 0f)
@@ -840,8 +850,12 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            Vector3 axis = snapTarget.WorldNormal;
-            Vector3 centre = snapTarget.WorldPosition;
+            // Either kind of seat has an axis to turn about. Reading only the
+            // hole-to-hole one left a part threaded onto a screw unable to
+            // rotate at all: the dial came up, and every reading was taken
+            // against a zero vector.
+            Vector3 axis = SeatNormal;
+            Vector3 centre = SeatPosition;
             Ray ray = pointer.PointerRay;
 
             float facing = Vector3.Dot(ray.direction, axis);
@@ -889,16 +903,8 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            Vector3 centre = screwSeat.IsValid
-                ? screwSeat.WorldPosition
-                : snapTarget.WorldPosition;
-
-            Vector3 axis = screwSeat.IsValid
-                ? screwSeat.WorldNormal
-                : snapTarget.WorldNormal;
-
             rotationRing ??= HoleRotationRing.Create(snapColour);
-            rotationRing.Show(centre, axis, ringZeroDirection, holeRoll);
+            rotationRing.Show(SeatPosition, SeatNormal, ringZeroDirection, holeRoll);
         }
 
         /// <summary>
@@ -1258,13 +1264,71 @@ namespace VexDesigner.Parts
                 return UpdateScrewPreview(definition);
             }
 
-            if (definition.IsNut)
+            // A nut goes on a screw if there is one under the crosshair, and
+            // otherwise mates hole to hole like anything else.
+            if (definition.IsNut && UpdateNutPreview(definition))
             {
-                return UpdateNutPreview(definition);
+                return true;
+            }
+
+            // One hole means there is nothing to choose. Making the user click
+            // precisely on a nut's bore to line it up would be asking them to
+            // name the only option there is, so grabbing it anywhere is enough.
+            if (!definition.IsScrew && definition.holeSet != null &&
+                definition.holeSet.Count == 1)
+            {
+                return UpdateSingleHoleMate(definition);
             }
 
             return EndFastenerPreview();
         }
+
+        /// <summary>
+        /// Lines up a one-holed part with the hole under the crosshair, however
+        /// it happens to have been picked up.
+        /// </summary>
+        private bool UpdateSingleHoleMate(PartDefinition definition)
+        {
+            var holes = RaycastFor<PartHoles>(out _);
+            bool farSide = actions != null && actions.FarSideHeld;
+
+            PartHoles own = carried.GetComponent<PartHoles>();
+
+            if (holes == null || holes == own || !holes.HasHoles ||
+                !holes.TryAim(pointer.AimRay, farSide, out HoleHit hit))
+            {
+                return EndFastenerPreview();
+            }
+
+            Hole hole = definition.holeSet.holes[0];
+
+            screwTarget = hit;
+            nutTarget = default;
+            mateFace = hole.front;
+
+            BeginFastenerPreview();
+
+            if (HoleMating.ComputePose(
+                    hole.front, targetRotation, hit, squareOnSnapDegrees, 0f,
+                    carried.transform.lossyScale,
+                    out Vector3 position, out Quaternion rotation, out _))
+            {
+                PlaceGhost(position, rotation);
+            }
+
+            fastenerMarker ??= HoleHighlighter.Create("FastenerSeat", nutSeatColour);
+            fastenerMarker.SetColour(nutSeatColour);
+            fastenerMarker.Show(hit);
+
+            mating = true;
+            return true;
+        }
+
+        /// <summary>True while a one-holed part is being lined up on a hole.</summary>
+        private bool mating;
+
+        /// <summary>The face of it that will meet the metal.</summary>
+        private HoleFace mateFace;
 
         private bool UpdateScrewPreview(PartDefinition definition)
         {
@@ -1279,6 +1343,7 @@ namespace VexDesigner.Parts
 
             screwTarget = hit;
             nutTarget = default;
+            mating = false;
 
             BeginFastenerPreview();
 
@@ -1330,6 +1395,7 @@ namespace VexDesigner.Parts
 
             nutTarget = seating;
             screwTarget = default;
+            mating = false;
 
             BeginFastenerPreview();
 
@@ -1396,6 +1462,7 @@ namespace VexDesigner.Parts
             fastenerPreview = false;
             screwTarget = default;
             nutTarget = default;
+            mating = false;
 
             fastenerMarker?.Hide();
 
@@ -1441,6 +1508,7 @@ namespace VexDesigner.Parts
             GameObject placed = carried;
             PlacedScrew screw = nutTarget.Screw;
             NutSeating seating = nutTarget;
+            bool wasMating = mating;
 
             ghost?.SetGhosted(false);
             ghost = null;
@@ -1473,6 +1541,13 @@ namespace VexDesigner.Parts
                     ? "Nut fitted in the gap — everything above it is joined"
                     : "Nut tightened — the stack is joined");
 
+                return;
+            }
+
+            if (wasMating)
+            {
+                // Touching, not joined. A screw still has to go through it.
+                Assembly.Rebuild();
                 return;
             }
 
@@ -1795,12 +1870,68 @@ namespace VexDesigner.Parts
                     continue;
                 }
 
+                if (!TrueDistance(hits[i], out float distance) || distance >= bestDistance)
+                {
+                    continue;
+                }
+
                 best = candidate;
-                bestDistance = hits[i].distance;
+                bestDistance = distance;
                 nearestHit = hits[i];
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// How far away a part really is, as opposed to how far away its
+        /// collider claims to be.
+        ///
+        /// The two differ badly, because a part's collider is the convex hull
+        /// of its mesh. A C-channel's hull is a solid block filling the
+        /// channel, so anything sitting inside the channel - a nut on the end
+        /// of a screw, most obviously - is behind an invisible wall as far as
+        /// the physics engine is concerned, and every click meant for it lands
+        /// on the C-channel instead.
+        ///
+        /// Testing the actual triangles puts that right: the hull is ignored
+        /// where there is no metal, so the nut is simply the nearest thing and
+        /// the click reaches it.
+        /// </summary>
+        private bool TrueDistance(RaycastHit hit, out float distance)
+        {
+            distance = hit.distance;
+
+            var filter = hit.collider.GetComponentInParent<MeshFilter>();
+
+            if (filter == null || filter.sharedMesh == null)
+            {
+                // Not a part - the bench, a wall. The collider is the shape.
+                return true;
+            }
+
+            MeshRayTester tester = MeshRayTester.For(filter.sharedMesh);
+
+            if (tester == null)
+            {
+                return true;
+            }
+
+            Transform t = filter.transform;
+            Ray ray = pointer.AimRay;
+
+            Vector3 localOrigin = t.InverseTransformPoint(ray.origin);
+            Vector3 localDirection = t.InverseTransformDirection(ray.direction).normalized;
+
+            if (!tester.FirstCrossing(localOrigin, localDirection, aimDistance, out float local))
+            {
+                // The hull was hit but the metal was not. Looking straight
+                // through the open side of a channel, for instance.
+                return false;
+            }
+
+            distance = local * t.lossyScale.x;
+            return true;
         }
 
         /// <summary>
