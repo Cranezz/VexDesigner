@@ -77,19 +77,12 @@ namespace VexDesigner.Parts
         /// <summary>
         /// Where a nut goes on a screw, given where on it the user is pointing.
         ///
-        /// A nut is tightened up against whatever is above it, so the answer
-        /// is always the top of some stretch of bare shank. Which stretch is
-        /// decided by where the user is pointing - a screw with a gap in the
-        /// middle of its stack can take a nut in that gap, clamping only what
-        /// is above it and leaving the rest of the shank free, which is a real
-        /// thing to do with a real screw.
-        ///
-        /// Pointing somewhere a nut cannot go - at the head, at metal, past the
-        /// end - is not a refusal. The nearest place it *can* go is offered
-        /// instead, because the user is plainly asking for a nut on this screw
-        /// and there is only ever one sensible answer to that.
+        /// The end of the stack, tightened flush against the last piece of
+        /// metal - and on a bare screw, right up against the head. Where the
+        /// user is looking along the screw makes no difference, because
+        /// pointing at a screw means "put a nut on this screw" and that has
+        /// one answer.
         /// </summary>
-        /// <param name="aim">Ray the user is pointing with.</param>
         public static NutSeating FindNutSeating(
             PlacedScrew screw, PartDefinition nut, Ray aim)
         {
@@ -133,53 +126,43 @@ namespace VexDesigner.Parts
             // held over a screw.
             ScrewLine.Gaps(screw.Passes, length, gaps);
 
-            // Where along the shank the user is pointing: the closest approach
-            // of the aim ray to the screw's own line.
-            float pointed = Mathf.Clamp(ClosestApproach(aim, seat, direction), 0f, length);
-
-            // Every stretch of bare shank the nut actually fits on. Gaps too
-            // short to take it are not options and are left out here, rather
-            // than picked and then rejected - which is what used to happen, and
-            // why looking near the head of a short screw offered nothing at all
-            // instead of offering the one place that would have worked.
-            float distance = -1f;
+            // The end of the stack, flush against the last piece of metal.
+            // That is where a nut goes.
+            //
+            // An earlier version chose between every stretch of bare shank by
+            // which one the cursor was nearest, so the answer moved as the user
+            // looked around and the same screw took a nut in different places
+            // depending on where they happened to be pointing. Clever, and
+            // nobody asked for it. Pointing at a screw means "nut on this
+            // screw", and that has one answer.
+            float distance = LastExit(screw);
             bool inGap = false;
-            float nearest = float.MaxValue;
 
-            for (int i = 0; i < gaps.Count; i++)
+            if (distance + thickness > length + 1e-4f)
             {
-                Vector2 gap = gaps[i];
+                // No thread left past the metal. Fall back to the deepest
+                // stretch of bare shank that will take it - a screw that only
+                // reaches halfway can still clamp what it does reach, which is
+                // better than refusing to fasten anything at all.
+                distance = -1f;
 
-                if (gap.x + thickness > length + 1e-4f)
+                for (int i = gaps.Count - 1; i >= 0; i--)
                 {
-                    continue;
+                    if (gaps[i].x + thickness <= length + 1e-4f)
+                    {
+                        distance = gaps[i].x;
+                        inGap = i < gaps.Count - 1;
+                        break;
+                    }
                 }
 
-                // How far the pointer is from this stretch of shank. Zero while
-                // it is on it, so pointing at a particular gap chooses that gap
-                // and pointing anywhere else - the head, the metal, past the
-                // end - falls to the nearest one that works.
-                float reach = pointed < gap.x
-                    ? gap.x - pointed
-                    : (pointed > gap.y ? pointed - gap.y : 0f);
-
-                if (reach < nearest)
+                if (distance < 0f)
                 {
-                    nearest = reach;
-                    distance = gap.x;
-
-                    // The last gap is the run past the final plate: the
-                    // ordinary end-of-screw position, not a clamp in a gap.
-                    inGap = i < gaps.Count - 1;
+                    // Nowhere on this screw will take it. Not an error - the
+                    // wrong nut or the wrong screw, and both are obvious from
+                    // looking at them.
+                    return default;
                 }
-            }
-
-            if (distance < 0f)
-            {
-                // Nowhere on this screw will take it. Not an error - the user
-                // simply has the wrong nut or the wrong screw, which is obvious
-                // from looking at it.
-                return default;
             }
 
             seating.Distance = distance;
@@ -236,30 +219,5 @@ namespace VexDesigner.Parts
             position = seating.WorldPosition - offset;
         }
 
-        /// <summary>
-        /// Distance along a line to the point nearest a ray: the standard
-        /// closest approach of two skew lines.
-        /// </summary>
-        private static float ClosestApproach(Ray ray, Vector3 origin, Vector3 direction)
-        {
-            Vector3 w = origin - ray.origin;
-
-            float a = Vector3.Dot(direction, direction);
-            float b = Vector3.Dot(direction, ray.direction);
-            float c = Vector3.Dot(ray.direction, ray.direction);
-            float d = Vector3.Dot(direction, w);
-            float e = Vector3.Dot(ray.direction, w);
-
-            float denominator = (a * c) - (b * b);
-
-            // Looking straight down the screw. Every point on it is equally
-            // near, so there is nothing to choose between them.
-            if (Mathf.Abs(denominator) < 1e-9f)
-            {
-                return 0f;
-            }
-
-            return ((b * e) - (c * d)) / denominator;
-        }
     }
 }

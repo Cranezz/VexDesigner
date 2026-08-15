@@ -1914,6 +1914,12 @@ namespace VexDesigner.Parts
             carriedInstance = null;
             carriedDefinition = null;
 
+            // Nothing is in hand, so nothing may be see-through. A sweep rather
+            // than careful bookkeeping: which parts were ghosted and which
+            // assembly is being released can differ, and the cost of getting it
+            // wrong is a part left transparent with no way to put it right.
+            PartGhost.RestoreAll();
+
             interactionLock.CameraOrbitLocked = false;
 
             if (wasNut)

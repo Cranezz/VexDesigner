@@ -21,6 +21,34 @@ namespace VexDesigner.Parts
         private Material[][] original;
         private static Material shared;
 
+        /// <summary>
+        /// Every part currently see-through.
+        ///
+        /// Kept so that none can be stranded. Ghosting was applied to the
+        /// members of the assembly being carried and lifted from the members of
+        /// the assembly at the time of release - and those are not always the
+        /// same set, because bolting something on rebuilds the groups in
+        /// between. Any part that left the assembly mid-carry stayed
+        /// transparent for good, with nothing left holding a reference to put
+        /// it right.
+        /// </summary>
+        private static readonly System.Collections.Generic.List<PartGhost> Ghosted =
+            new System.Collections.Generic.List<PartGhost>();
+
+        /// <summary>Makes every part in the workshop solid again.</summary>
+        public static void RestoreAll()
+        {
+            for (int i = Ghosted.Count - 1; i >= 0; i--)
+            {
+                if (Ghosted[i] != null)
+                {
+                    Ghosted[i].SetGhosted(false);
+                }
+            }
+
+            Ghosted.Clear();
+        }
+
         public bool IsGhosted { get; private set; }
 
         public void SetGhosted(bool ghosted)
@@ -40,10 +68,12 @@ namespace VexDesigner.Parts
 
                 Capture();
                 Apply(GhostMaterial());
+                Ghosted.Add(this);
             }
             else
             {
                 Restore();
+                Ghosted.Remove(this);
                 GetComponent<PartOutline>()?.Reapply();
             }
         }
@@ -99,6 +129,7 @@ namespace VexDesigner.Parts
             if (IsGhosted)
             {
                 Restore();
+                Ghosted.Remove(this);
                 IsGhosted = false;
             }
         }

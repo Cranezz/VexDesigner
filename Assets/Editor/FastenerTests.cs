@@ -38,7 +38,8 @@ namespace VexDesigner.EditorTools
             // measured from the wrong place.
             Case(ScrewThroughOneWall);
             Case(NutOnTheEnd);
-            Case(NutInAGap);
+            Case(NutGoesOnTheEnd);
+            Case(NutFallsBackIntoAGap);
             Case(ScrewTooShortForANut);
             Case(GroupingFormsAndComesApart);
             Case(TwoScrewsHoldWhenOneComesOff);
@@ -210,10 +211,10 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
-        /// Two walls with air between them: pointing at the air should offer a
-        /// seat there rather than at the end.
+        /// Two walls with air between them. The nut goes on the end, and where
+        /// the user is looking makes no difference to that.
         /// </summary>
-        private static void NutInAGap(List<GameObject> rubbish)
+        private static void NutGoesOnTheEnd(List<GameObject> rubbish)
         {
             PartDefinition channelDef = Load("CCHL-2");
             PartDefinition screwDef = Load("276-8016");   // 2.5 inch
@@ -246,31 +247,87 @@ namespace VexDesigner.EditorTools
                 return;
             }
 
-            float gapStart = placed.Passes[0].Exit;
-            float gapEnd = placed.Passes[1].Entry;
+            float lastExit = placed.Passes[1].Exit;
 
-            True("there is a gap between them", gapEnd > gapStart);
+            // Pointed into the gap, at the metal, and past the end. All three
+            // have to give the same answer, because there is only one.
+            var wheres = new[]
+            {
+                (placed.Passes[0].Exit + placed.Passes[1].Entry) * 0.5f,
+                placed.Passes[0].Exit * 0.5f,
+                (lastExit + placed.Length) * 0.5f,
+            };
 
-            // Pointed at the middle of the bare shank between the two walls.
-            Ray aim = AimAt(placed, (gapStart + gapEnd) * 0.5f);
-            NutSeating seating = FastenerFitting.FindNutSeating(placed, nutDef, aim);
+            for (int i = 0; i < wheres.Length; i++)
+            {
+                Ray aim = AimAt(placed, wheres[i]);
+                NutSeating seating = FastenerFitting.FindNutSeating(placed, nutDef, aim);
 
-            True("the gap offers a seat", seating.IsValid);
-            True("it is recognised as a gap fitting", seating.InGap);
+                True("a seat is offered from view " + i, seating.IsValid);
 
-            Near("nut tightens against the wall above the gap",
-                seating.Distance, gapStart);
-
-            True("it fits", seating.Fits);
-
-            // And pointing past everything still gives the end, not the gap.
-            Ray endAim = AimAt(placed, (placed.Passes[1].Exit + placed.Length) * 0.5f);
-            NutSeating endSeating = FastenerFitting.FindNutSeating(placed, nutDef, endAim);
-
-            False("pointing past the stack is not a gap fitting", endSeating.InGap);
-            Near("and seats on the last face", endSeating.Distance, placed.Passes[1].Exit);
+                if (seating.IsValid)
+                {
+                    Near("the nut goes on the end from view " + i,
+                        seating.Distance, lastExit);
+                    False("and it is not a gap fitting from view " + i, seating.InGap);
+                }
+            }
 
             Object.DestroyImmediate(second);
+        }
+
+        /// <summary>
+        /// A screw that only just reaches the far plate has no thread left on
+        /// the end, so the nut falls back to the last stretch that will take
+        /// it - clamping what the screw does reach rather than nothing at all.
+        /// </summary>
+        private static void NutFallsBackIntoAGap(List<GameObject> rubbish)
+        {
+            PartDefinition channelDef = Load("CCHL-2");
+            PartDefinition screwDef = Load("276-4997");   // 1-1/4 inch
+            PartDefinition nutDef = Load("275-1028");     // 0.122 in
+
+            if (channelDef == null || screwDef == null || nutDef == null)
+            {
+                return;
+            }
+
+            GameObject first = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            HoleHit hole = first.GetComponent<PartHoles>().FaceAt(0, false);
+
+            // Placed so the screw only just passes through the second wall.
+            Vector3 down = -hole.WorldNormal * (1.1f * InchesToMetres);
+            Spawn(channelDef, down, Quaternion.identity, rubbish);
+
+            PlacedScrew placed = DriveScrew(screwDef, hole, rubbish);
+            if (placed == null || placed.Passes.Count < 2)
+            {
+                True("the short screw reaches both walls", false);
+                return;
+            }
+
+            Dump("only just through", placed);
+
+            float lastExit = placed.Passes[1].Exit;
+            float spare = (placed.Length - lastExit) / InchesToMetres;
+
+            Debug.Log("[FastenerTests] fallback: " + spare.ToString("0.0000") +
+                      " in past the far wall, nut is " +
+                      nutDef.fastener.thicknessInches.ToString("0.0000") + " in.");
+
+            True("there is not room on the end",
+                spare < nutDef.fastener.thicknessInches);
+
+            Ray aim = AimAt(placed, placed.Length * 0.99f);
+            NutSeating seating = FastenerFitting.FindNutSeating(placed, nutDef, aim);
+
+            True("a seat is still offered", seating.IsValid);
+
+            if (seating.IsValid)
+            {
+                Near("it falls back into the gap", seating.Distance, placed.Passes[0].Exit);
+                True("and is reported as a gap fitting", seating.InGap);
+            }
         }
 
         /// <summary>
