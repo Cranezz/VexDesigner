@@ -59,22 +59,33 @@ namespace VexDesigner.EditorTools
 
             // The blade. Cosmetic - the cut is a plane, and this only says
             // where that plane is.
+            // Hinged at the fence, not at the middle of the bed.
+            //
+            // That is where the cut plane turns, and where a real mitre head
+            // turns, so a blade hinged anywhere else disagrees with the red
+            // preview the moment it is swung - the preview being right and the
+            // blade wrong, which is a confusing way round to get it.
             var bladePivot = new GameObject("BladePivot");
             bladePivot.transform.SetParent(root.transform, false);
-            bladePivot.transform.localPosition = new Vector3(bladeX, bedTop, 0f);
+            bladePivot.transform.localPosition = new Vector3(bladeX, bedTop, fenceZ);
 
+            // Reaching forward from the fence, since that is now the hinge.
             GameObject blade = Slab(bladePivot.transform, "Blade",
-                new Vector3(0f, In(3.5f), 0f),
+                new Vector3(0f, In(3.5f), -In(BedDepthIn) * 0.35f),
                 new Vector3(In(0.09f), In(7f), In(7f)),
-                new Color(0.75f, 0.76f, 0.80f));
+                new Color(0.75f, 0.78f, 0.85f));
 
             Object.DestroyImmediate(blade.GetComponent<Collider>());
+
+            // See-through, so the stock under it stays readable. An opaque
+            // blade hides the very cut it is about to make.
+            Glass(blade, new Color(0.75f, 0.82f, 0.95f, 0.35f));
 
             // A thin bright line down the bed showing exactly where the cut
             // falls. The blade above it is round and its lowest point is hard
             // to judge from overhead; this is unambiguous.
             GameObject line = Slab(bladePivot.transform, "CutLine",
-                new Vector3(0f, In(0.02f), 0f),
+                new Vector3(0f, In(0.02f), -In(BedDepthIn) * 0.5f),
                 new Vector3(In(0.06f), In(0.04f), In(BedDepthIn)),
                 new Color(1f, 0.85f, 0.2f));
 
@@ -166,12 +177,58 @@ namespace VexDesigner.EditorTools
             collider.radius = In(0.9f);
             collider.center = new Vector3(0f, In(0.1f), 0f);
 
+            // The readout, floating just above the knob.
+            var labelGo = new GameObject("Readout");
+            labelGo.transform.SetParent(root.transform, false);
+            labelGo.transform.localPosition = new Vector3(0f, In(1.6f), 0f);
+
+            var label = labelGo.AddComponent<TMPro.TextMeshPro>();
+            label.text = string.Empty;
+            label.fontSize = 1.1f;
+            label.alignment = TMPro.TextAlignmentOptions.Center;
+            label.color = colour;
+
+            // Sized in world units, so a foot of bench does not carry a
+            // billboard the size of a door.
+            label.rectTransform.sizeDelta = new Vector2(In(4.5f), In(2.4f));
+
             var knob = root.AddComponent<SawKnob>();
             knob.Configure(control);
 
             var so = new UnityEditor.SerializedObject(knob);
             so.FindProperty("dial").objectReferenceValue = dial.transform;
+            so.FindProperty("readout").objectReferenceValue = label;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>Makes something transparent, which URP needs told three ways.</summary>
+        private static void Glass(GameObject go, Color colour)
+        {
+            var renderer = go.GetComponent<MeshRenderer>();
+
+            if (renderer == null)
+            {
+                return;
+            }
+
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"))
+            {
+                name = go.name + " (glass)",
+            };
+
+            material.SetFloat("_Surface", 1f);
+            material.SetFloat("_Blend", 0f);
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+
+            material.SetColor("_BaseColor", colour);
+            material.SetFloat("_Metallic", 0.6f);
+            material.SetFloat("_Smoothness", 0.8f);
+
+            renderer.sharedMaterial = material;
         }
 
         private static void Paint(GameObject go, Color colour, float metallic, float smoothness)

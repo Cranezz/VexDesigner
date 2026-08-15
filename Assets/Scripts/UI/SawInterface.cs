@@ -19,6 +19,14 @@ namespace VexDesigner.UI
     /// precision the cut actually has, and hiding it would leave the user
     /// unable to tell 7.3 from 7.317.
     /// </summary>
+    /// <remarks>
+    /// Lives on the canvas, not on the panel it shows and hides. A component
+    /// on a disabled object does not run, so a panel that starts hidden and
+    /// holds its own controller never wakes up to show itself - which is why
+    /// the readouts and the cut button were nowhere to be found. That mistake
+    /// has been made three times in this project now; the rule is that
+    /// whatever switches an object off cannot live on it.
+    /// </remarks>
     public sealed class SawInterface : MonoBehaviour
     {
         [SerializeField] private SawController controller;
@@ -105,9 +113,9 @@ namespace VexDesigner.UI
                     : "No stock on the bed");
 
             Set(hintLabel,
-                "Drag a knob to set it • Shift for finer steps • " +
-                "Ctrl for free • Right-drag to pan • Scroll to zoom • " +
-                "Esc to leave");
+                "Drag a knob to set it  •  Shift finer  •  Ctrl free\n" +
+                "Right-drag orbits  •  Shift + right-drag pans  •  Scroll zooms\n" +
+                "<b>Enter</b> cuts  •  <b>Esc</b> leaves");
 
             if (cutButton != null)
             {

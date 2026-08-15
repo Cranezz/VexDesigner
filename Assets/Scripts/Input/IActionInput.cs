@@ -60,5 +60,8 @@ namespace VexDesigner.InputSources
 
         /// <summary>Back out of whatever is open.</summary>
         bool CancelPressed { get; }
+
+        /// <summary>Commit whatever is set up - take the cut.</summary>
+        bool ConfirmPressed { get; }
     }
 }

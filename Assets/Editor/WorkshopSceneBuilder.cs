@@ -914,7 +914,8 @@ namespace VexDesigner.EditorTools
             hint.enableWordWrapping = true;
             hint.GetComponent<LayoutElement>().preferredHeight = 60f;
 
-            var saw = panel.AddComponent<VexDesigner.UI.SawInterface>();
+            // On the canvas, not on the panel: see SawInterface's remarks.
+            var saw = parent.gameObject.AddComponent<VexDesigner.UI.SawInterface>();
             var so = new SerializedObject(saw);
 
             so.FindProperty("panel").objectReferenceValue = panel;

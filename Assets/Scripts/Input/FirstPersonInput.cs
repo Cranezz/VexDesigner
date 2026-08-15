@@ -94,6 +94,9 @@ namespace VexDesigner.InputSources
         /// <summary>Back out of whatever is open.</summary>
         public bool CancelPressed { get; private set; }
 
+        /// <summary>Commit whatever is set up.</summary>
+        public bool ConfirmPressed { get; private set; }
+
         private VexDesigner.Parts.InteractionLock interactionLock;
 
         private void Awake()
@@ -186,6 +189,7 @@ namespace VexDesigner.InputSources
                 RotateModifierPressed = false;
                 UsePressed = false;
                 CancelPressed = false;
+                ConfirmPressed = false;
                 return;
             }
 
@@ -209,6 +213,9 @@ namespace VexDesigner.InputSources
 
             UsePressed = keyboard.eKey.wasPressedThisFrame;
             CancelPressed = keyboard.escapeKey.wasPressedThisFrame;
+
+            ConfirmPressed = keyboard.enterKey.wasPressedThisFrame ||
+                             keyboard.numpadEnterKey.wasPressedThisFrame;
         }
 
         private void ReadLook(Mouse mouse)

@@ -61,11 +61,20 @@ namespace VexDesigner.Parts
         private Camera view;
 
         private Vector3 cameraOffset;
-        private float height = 0.9f;
+
+        /// <summary>How far the camera sits from the middle of the bed.</summary>
+        private float distance = 0.9f;
+
+        /// <summary>Degrees above horizontal. Ninety is straight down.</summary>
+        private float pitch = 89f;
+
+        /// <summary>Degrees around the machine, measured from its own forward.</summary>
+        private float yaw;
 
         private SawKnob grabbed;
         private float grabbedReference;
         private float grabbedStart;
+        private float turnedTotal;
 
         private Transform cameraParent;
         private Vector3 cameraLocalPosition;
@@ -173,7 +182,9 @@ namespace VexDesigner.Parts
             }
 
             cameraOffset = Vector3.zero;
-            height = 0.9f;
+            distance = 0.9f;
+            pitch = 89f;
+            yaw = 0f;
 
             // Taken off the player's head for the duration.
             //
@@ -249,6 +260,11 @@ namespace VexDesigner.Parts
                 return;
             }
 
+            if (actions != null && actions.ConfirmPressed && saw.Cut())
+            {
+                MessageBanner.Info("Cut");
+            }
+
             UpdateCamera();
             UpdateKnob();
 
@@ -265,17 +281,36 @@ namespace VexDesigner.Parts
 
             if (!Mathf.Approximately(zoom, 0f))
             {
-                height = Mathf.Clamp(height * (1f - (zoom * 0.08f)), minHeight, maxHeight);
+                distance = Mathf.Clamp(distance * (1f - (zoom * 0.08f)), minHeight, maxHeight);
             }
 
-            // Right-drag slides the view, which leaves the left button free for
-            // the knobs and the buttons.
             if (pointer.SecondaryHeld)
             {
-                Vector2 drag = pointer.DragDelta * (height * 0.0015f);
-                cameraOffset -= new Vector3(drag.x, 0f, drag.y);
+                Vector2 drag = pointer.DragDelta;
 
-                cameraOffset = Vector3.ClampMagnitude(cameraOffset, panLimit);
+                if (actions != null && actions.SnapHeld)
+                {
+                    // Panning is done in the camera's own axes, not the world's.
+                    // Sliding the view along world X while looking down a
+                    // machine that is turned ninety degrees moved the picture
+                    // up and down when the mouse went left and right, which is
+                    // exactly as confusing as it sounds.
+                    Vector3 slide =
+                        (view.transform.right * -drag.x) +
+                        (view.transform.up * -drag.y);
+
+                    cameraOffset = Vector3.ClampMagnitude(
+                        cameraOffset + (slide * (distance * 0.0015f)), panLimit);
+                }
+                else
+                {
+                    // Orbit. A saw is a three-dimensional object and a cut is
+                    // judged by looking along the blade as much as down at it,
+                    // so the view swings round the machine rather than only
+                    // hanging over it.
+                    yaw += drag.x * 0.25f;
+                    pitch = Mathf.Clamp(pitch - (drag.y * 0.25f), 8f, 89.5f);
+                }
             }
 
             PlaceCamera();
@@ -289,14 +324,20 @@ namespace VexDesigner.Parts
             }
 
             Transform anchor = saw.Viewpoint != null ? saw.Viewpoint : saw.transform;
+            Vector3 centre = anchor.position + cameraOffset;
 
-            Vector3 above = anchor.position + (Vector3.up * height) + cameraOffset;
+            // Measured from the machine's own forward, so the view starts
+            // square to the fence however the saw is stood in the room.
+            Quaternion swing = Quaternion.AngleAxis(yaw, Vector3.up) * saw.transform.rotation;
+            Vector3 back = swing * Vector3.forward;
 
-            view.transform.position = above;
+            Vector3 direction =
+                (Vector3.up * Mathf.Sin(pitch * Mathf.Deg2Rad)) +
+                (back * Mathf.Cos(pitch * Mathf.Deg2Rad));
 
-            // Looking straight down, with the fence at the top of the screen,
-            // so left and right on screen are left and right on the machine.
-            view.transform.rotation = Quaternion.LookRotation(Vector3.down, saw.transform.forward);
+            view.transform.position = centre + (direction.normalized * distance);
+            view.transform.rotation = Quaternion.LookRotation(
+                (centre - view.transform.position).normalized, Vector3.up);
         }
 
         /// <summary>
@@ -324,13 +365,23 @@ namespace VexDesigner.Parts
 
                 grabbedReference = grabbed.ReadAngle(pointer.PointerRay);
                 grabbedStart = grabbed.Value(saw);
+                turnedTotal = 0f;
                 return;
             }
 
             float now = grabbed.ReadAngle(pointer.PointerRay);
-            float turned = Mathf.DeltaAngle(grabbedReference, now);
 
-            grabbed.Apply(saw, grabbedStart, turned, Coarse(grabbed), Fine(grabbed), Free);
+            // Unwrapped, so a knob can be spun round and round.
+            //
+            // Reading the turn as a plain difference caps it at half a turn,
+            // because an angle only has 360 degrees to report - so the feed
+            // knob, which is four inches per turn, could be moved two inches
+            // and then snapped back to nothing as the reading wrapped past the
+            // far side. Accumulating the difference frame by frame has no such
+            // limit.
+            turnedTotal += Mathf.DeltaAngle(grabbedReference + turnedTotal, now);
+
+            grabbed.Apply(saw, grabbedStart, turnedTotal, Coarse(grabbed), Fine(grabbed), Free);
         }
 
         private SawKnob KnobUnderPointer()

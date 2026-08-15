@@ -40,7 +40,62 @@ namespace VexDesigner.Parts
 
         [SerializeField] private Transform dial;
 
+        [Tooltip("Floating readout beside the knob.")]
+        [SerializeField] private TMPro.TextMeshPro readout;
+
+        private SawStation station;
+
         public Control Kind => kind;
+
+        /// <summary>
+        /// Keeps the readout current and facing the camera.
+        ///
+        /// Beside the knob rather than only on the panel, because the knob is
+        /// where the user is looking while they turn it - a number on the far
+        /// side of the screen means glancing away from the thing being
+        /// adjusted, which is exactly when a fine adjustment goes wrong.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (readout == null)
+            {
+                return;
+            }
+
+            if (station == null)
+            {
+                station = GetComponentInParent<SawStation>();
+            }
+
+            readout.text = Describe(station);
+
+            Camera camera = Camera.main;
+
+            if (camera != null)
+            {
+                // Billboarded, since the view now orbits the machine and a
+                // fixed label would be edge-on from half of it.
+                readout.transform.rotation = Quaternion.LookRotation(
+                    readout.transform.position - camera.transform.position, Vector3.up);
+            }
+        }
+
+        private string Describe(SawStation saw)
+        {
+            if (saw == null)
+            {
+                return string.Empty;
+            }
+
+            return kind switch
+            {
+                Control.Feed => $"FEED\n{saw.FeedInches:0.000} in",
+                Control.Blade => $"BLADE\n{saw.BladeAngle:0.00}\u00b0",
+                Control.RotateX => $"TURN X\n{saw.Rotation.x:0.##}\u00b0",
+                Control.RotateY => $"TURN Y\n{saw.Rotation.y:0.##}\u00b0",
+                _ => $"TURN Z\n{saw.Rotation.z:0.##}\u00b0",
+            };
+        }
 
         public void Configure(Control control)
         {
