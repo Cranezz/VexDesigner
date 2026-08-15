@@ -67,6 +67,12 @@ namespace VexDesigner.EditorTools
 
         private static float In(float inches) => inches * InchesToMetres;
 
+        // --- Table saw --------------------------------------------------
+        // Far enough along the bench to be clear of the mat, and far enough
+        // back from the end that its nine-inch bed sits on the wood rather
+        // than over the edge.
+        private const float SawCentreXIn = 28f;
+
         [MenuItem("VexDesigner/Rebuild Workshop Scene")]
         public static void BuildMenuItem()
         {
@@ -330,14 +336,36 @@ namespace VexDesigner.EditorTools
         {
             float top = In(TableHeightIn);
 
-            // Turned to face the room, so the fence is at the back from the
-            // player's side and the stock feeds left to right.
-            SawStationBuilder.Build(
-                new Vector3(
-                    In(TableWidthIn * 0.5f - 18f),
-                    top,
-                    In(TableCentreZIn) - In(TableDepthIn * 0.5f) + In(6f)),
-                Quaternion.identity);
+            // Standing on the right-hand end of the bench and facing right, so
+            // the player walks to the end of the bench to use it and the stock
+            // runs front to back with room to overhang at both ends. Laid along
+            // the bench instead, the machine sat in the middle of the working
+            // area and the mat had nowhere to go.
+            GameObject saw = SawStationBuilder.Build(
+                new Vector3(SawCentreXIn * InchesToMetres, top, In(TableCentreZIn)),
+                Quaternion.Euler(0f, -90f, 0f));
+
+            // Reported because the machine's footprint has to land on the
+            // bench, and a saw hanging off the end is not visible from a
+            // headless build.
+            Bounds footprint = default;
+            bool first = true;
+
+            foreach (Renderer renderer in saw.GetComponentsInChildren<Renderer>())
+            {
+                if (first) { footprint = renderer.bounds; first = false; }
+                else { footprint.Encapsulate(renderer.bounds); }
+            }
+
+            Debug.Log(
+                $"[WorkshopSceneBuilder] Saw at {SawCentreXIn:0.#} in along the bench, " +
+                $"spanning x {footprint.min.x / InchesToMetres:0.#} to " +
+                $"{footprint.max.x / InchesToMetres:0.#} in, z " +
+                $"{footprint.min.z / InchesToMetres:0.#} to " +
+                $"{footprint.max.z / InchesToMetres:0.#} in. Bench is x " +
+                $"{-TableWidthIn * 0.5f:0.#} to {TableWidthIn * 0.5f:0.#}, z " +
+                $"{TableCentreZIn - TableDepthIn * 0.5f:0.#} to " +
+                $"{TableCentreZIn + TableDepthIn * 0.5f:0.#}.");
         }
 
         private static void BuildPlayer()

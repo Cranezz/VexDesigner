@@ -67,6 +67,10 @@ namespace VexDesigner.Parts
         private float grabbedReference;
         private float grabbedStart;
 
+        private Transform cameraParent;
+        private Vector3 cameraLocalPosition;
+        private Quaternion cameraLocalRotation;
+
         /// <summary>True while the saw is being worked at.</summary>
         public bool IsOpen => saw != null;
 
@@ -171,10 +175,24 @@ namespace VexDesigner.Parts
             cameraOffset = Vector3.zero;
             height = 0.9f;
 
-            // The player is put away rather than moved: walking about while
-            // looking down at a machine from above makes no sense, and letting
-            // the two run at once means two things fighting for the camera.
-            if (player != null) { player.MovementEnabled = false; }
+            // Taken off the player's head for the duration.
+            //
+            // Not merely repositioned: the camera is the player's head, and the
+            // controller writes its local position every frame to hold it at
+            // eye height and to ease it up and down when crouching. That runs
+            // whether or not movement is enabled, so an overhead position
+            // lasted exactly until the end of the frame - the view turned to
+            // look down and then stayed where the player's eyes were, which is
+            // precisely what was reported.
+            cameraParent = view.transform.parent;
+            cameraLocalPosition = view.transform.localPosition;
+            cameraLocalRotation = view.transform.localRotation;
+
+            view.transform.SetParent(null, true);
+
+            // The controller is switched off outright rather than told not to
+            // move. Half-disabling it was what hid the problem above.
+            if (player != null) { player.enabled = false; }
             if (placement != null) { placement.enabled = false; }
             if (interactionLock != null) { interactionLock.CameraOrbitLocked = true; }
 
@@ -205,16 +223,18 @@ namespace VexDesigner.Parts
 
             pointer.ShowPointer(false);
 
-            if (player != null) { player.MovementEnabled = true; }
+            // The camera goes back to the head it belongs to, exactly where
+            // it was, so the player carries on looking where they were looking.
+            if (view != null)
+            {
+                view.transform.SetParent(cameraParent, false);
+                view.transform.localPosition = cameraLocalPosition;
+                view.transform.localRotation = cameraLocalRotation;
+            }
+
+            if (player != null) { player.enabled = true; }
             if (placement != null) { placement.enabled = true; }
             if (interactionLock != null) { interactionLock.CameraOrbitLocked = false; }
-
-            // The camera goes back to the head it belongs to.
-            if (view != null && player != null)
-            {
-                view.transform.localPosition = Vector3.zero;
-                view.transform.localRotation = Quaternion.identity;
-            }
         }
 
         // ------------------------------------------------------------------
