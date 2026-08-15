@@ -61,7 +61,21 @@ namespace VexDesigner.Parts
 
         private void OnDisable() => Live.Remove(this);
 
-        public HoleSet Holes => definition == null ? null : definition.holeSet;
+        /// <summary>
+        /// This part's holes.
+        ///
+        /// Normally the part type's, shared by every copy. A part that has been
+        /// cut gets its own set, because a cut takes holes away from *this*
+        /// piece of metal and the others are untouched - which is the same
+        /// reason cuts live on the instance rather than on the definition.
+        /// </summary>
+        public HoleSet Holes => cutHoles ?? (definition == null ? null : definition.holeSet);
+
+        private HoleSet cutHoles;
+
+        public void SetOverride(HoleSet holes) => cutHoles = holes;
+
+        public void ClearOverride() => cutHoles = null;
 
         public bool HasHoles => Holes != null && !Holes.IsEmpty;
 

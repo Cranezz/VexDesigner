@@ -15,6 +15,14 @@ namespace VexDesigner.Parts
     [System.Serializable]
     public struct CutOperation
     {
+        [Tooltip("The blade, in the part's own local space. Everything else " +
+                 "here describes the cut for a human; this is what actually " +
+                 "divides the metal, and what a reload replays.")]
+        public Vector3 localNormal;
+
+        [Tooltip("Plane offset, paired with the normal above.")]
+        public float localOffset;
+
         [Tooltip("Distance along the part's cut axis from its zero end, in " +
                  "inches. Measured from the part, not from world space, so a " +
                  "cut survives the part being moved.")]
