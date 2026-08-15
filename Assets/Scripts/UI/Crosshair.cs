@@ -5,8 +5,13 @@ namespace VexDesigner.UI
     using VexDesigner.Parts;
 
     /// <summary>
-    /// The aiming dot, and the free pointer that replaces it during a dial
-    /// gesture.
+    /// The aiming dot, and the padlock badge under it.
+    ///
+    /// During a dial gesture there is no crosshair at all: the real mouse
+    /// pointer is released and the operating system draws it, which is both
+    /// what the user expects and the only cursor guaranteed to be the right
+    /// size. An earlier version drew its own in the HUD, and a second cursor
+    /// that does not match the real one is worse than none.
     ///
     /// The dot never changes shape, only colour. It used to swap to a hand
     /// glyph over anything grabbable, and a 34-pixel hand centred on the aim
@@ -23,7 +28,6 @@ namespace VexDesigner.UI
     {
         [SerializeField] private Image dot;
         [SerializeField] private Image padlock;
-        [SerializeField] private Image pointer;
         [SerializeField] private PartPlacementController placement;
         [SerializeField] private TransformToolController transformTool;
 
@@ -36,10 +40,6 @@ namespace VexDesigner.UI
 
         private static Sprite dotSprite;
         private static Sprite padlockSprite;
-        private static Sprite pointerSprite;
-
-        private RectTransform pointerRect;
-        private VexDesigner.InputSources.IPointerInput pointerInput;
 
         private void Awake()
         {
@@ -53,12 +53,6 @@ namespace VexDesigner.UI
                 transformTool = FindAnyObjectByType<TransformToolController>();
             }
 
-            pointerInput = FindAnyObjectByType<VexDesigner.InputSources.FirstPersonInput>();
-
-            if (pointer != null)
-            {
-                pointerRect = pointer.rectTransform;
-            }
         }
 
         private void Update()
@@ -67,8 +61,6 @@ namespace VexDesigner.UI
             {
                 return;
             }
-
-            UpdatePointer();
 
             // Hidden entirely while turning a gizmo ring or a hole dial: the
             // view is locked and the mouse is driving the rotation, so a
@@ -101,37 +93,6 @@ namespace VexDesigner.UI
             if (padlock != null)
             {
                 padlock.enabled = placement.IsCarrying && placement.CarriedIsFrozen;
-            }
-        }
-
-        /// <summary>
-        /// Draws the free pointer where the input layer says it is.
-        ///
-        /// Drawn in the HUD rather than handed to the operating system, so it
-        /// cannot wander out of the window in the middle of a gesture.
-        /// </summary>
-        private void UpdatePointer()
-        {
-            if (pointer == null || pointerInput == null)
-            {
-                return;
-            }
-
-            bool visible = pointerInput.PointerVisible;
-            pointer.enabled = visible;
-
-            if (!visible || pointerRect == null)
-            {
-                return;
-            }
-
-            Vector2 screen = pointerInput.PointerScreenPosition;
-            var canvas = pointerRect.parent as RectTransform;
-
-            if (canvas != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvas, screen, null, out Vector2 local))
-            {
-                pointerRect.anchoredPosition = local;
             }
         }
 
@@ -170,63 +131,6 @@ namespace VexDesigner.UI
 
             dotSprite = BuildSprite(pixels, size, "CrosshairDot");
             return dotSprite;
-        }
-
-        /// <summary>
-        /// The free pointer: an arrow, so it reads as a cursor rather than as
-        /// a second crosshair. Its tip is the hot spot, and the sprite pivot is
-        /// set to match when it is built into the HUD.
-        /// </summary>
-        public static Sprite GetPointerSprite()
-        {
-            if (pointerSprite != null)
-            {
-                return pointerSprite;
-            }
-
-            string[] rows =
-            {
-                "X...............",
-                "XX..............",
-                "XOX.............",
-                "XOOX............",
-                "XOOOX...........",
-                "XOOOOX..........",
-                "XOOOOOX.........",
-                "XOOOOOOX........",
-                "XOOOOOOOX.......",
-                "XOOOOXXXXX......",
-                "XOOXOX..........",
-                "XOX.XOX.........",
-                "XX..XOX.........",
-                "X....XOX........",
-                "......XX........",
-                "................",
-            };
-
-            const int size = 16;
-            var pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                // Bitmap rows read top-down; texture rows read bottom-up.
-                string row = rows[size - 1 - y];
-
-                for (int x = 0; x < size; x++)
-                {
-                    char c = x < row.Length ? row[x] : '.';
-
-                    // Black outline round a white body, so the pointer stays
-                    // legible over pale aluminium and dark shadow alike.
-                    pixels[(y * size) + x] =
-                        c == 'O' ? Color.white :
-                        c == 'X' ? new Color(0f, 0f, 0f, 0.85f) :
-                        Color.clear;
-                }
-            }
-
-            pointerSprite = BuildSprite(pixels, size, "CrosshairPointer");
-            return pointerSprite;
         }
 
         public static Sprite GetPadlockSprite()

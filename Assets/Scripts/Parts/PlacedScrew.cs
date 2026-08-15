@@ -98,6 +98,10 @@ namespace VexDesigner.Parts
         public float Length =>
             definition == null ? 0f : definition.ShankLengthMetres;
 
+        /// <summary>How far the head stands above the metal, in metres.</summary>
+        public float HeadHeight =>
+            definition == null ? 0f : definition.fastener.headHeightInches * 0.0254f;
+
         /// <summary>World point under the head, where it meets the metal.</summary>
         public Vector3 Seat =>
             definition == null

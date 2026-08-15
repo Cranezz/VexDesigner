@@ -510,14 +510,6 @@ namespace VexDesigner.EditorTools
             padlock.GetComponent<Image>().color = new Color(0.62f, 0.8f, 1f, 0.9f);
             padlock.GetComponent<Image>().enabled = false;
 
-            // The free pointer, used while a rotation dial is up. Pivoted at
-            // its own tip so it points at the position it is given rather than
-            // straddling it.
-            GameObject pointer = CreateHudImage(canvasGo.transform, "Pointer", 16f);
-            pointer.GetComponent<Image>().sprite = Crosshair.GetPointerSprite();
-            pointer.GetComponent<RectTransform>().pivot = new Vector2(0f, 1f);
-            pointer.GetComponent<Image>().enabled = false;
-
             BuildKeybindHints(canvasGo.transform);
             BuildMessageBanner(canvasGo.transform);
             BuildDeletionPreview(canvasGo.transform);
@@ -527,7 +519,6 @@ namespace VexDesigner.EditorTools
             var so = new SerializedObject(crosshair);
             so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
             so.FindProperty("padlock").objectReferenceValue = padlock.GetComponent<Image>();
-            so.FindProperty("pointer").objectReferenceValue = pointer.GetComponent<Image>();
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // An EventSystem is required for any UI interaction. Without one

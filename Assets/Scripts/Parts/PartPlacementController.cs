@@ -104,6 +104,11 @@ namespace VexDesigner.Parts
                  "rather than a selection.")]
         [SerializeField] private Color snapColour = new Color(0.35f, 1f, 0.45f);
 
+        [Tooltip("How close the crosshair must pass to a screw's axis to be " +
+                 "pointing at it, in metres. A quarter inch: wide enough that a " +
+                 "screw is a target rather than a pixel.")]
+        [SerializeField] private float screwAimTolerance = 0.0064f;
+
         [Tooltip("Degrees the roll snaps to while the snap modifier is held " +
                  "during hole rotation. Measured from the square-on position, " +
                  "so the increments are relative to the part being joined to.")]
@@ -503,8 +508,15 @@ namespace VexDesigner.Parts
         /// </summary>
         private void BeginCarryByHole(HoleHit hit)
         {
-            GameObject go = hit.Part.gameObject;
-            var instance = go.GetComponent<PartInstance>();
+            var holePart = hit.Part.GetComponent<PartInstance>();
+
+            // The body belongs to the assembly, not to the part the hole is
+            // in. Grabbing a follower found no Rigidbody, one was added to
+            // cope, and adding it broke the very weld holding the robot
+            // together - so clicking a hole quietly took that part out of its
+            // own assembly and carried it off alone.
+            PartInstance instance = holePart?.Group?.Leader ?? holePart;
+            GameObject go = instance != null ? instance.gameObject : hit.Part.gameObject;
 
             float distance = Mathf.Clamp(
                 Vector3.Distance(pointer.AimRay.origin, hit.WorldPosition),
@@ -522,7 +534,18 @@ namespace VexDesigner.Parts
 
             carryingByHole = true;
             carriedHoles = hit.Part;
+
+            // The hole is re-expressed in the carried body's own space. Every
+            // pose calculation then works on the thing that actually moves,
+            // and a hole belonging to a bolted-on bracket positions the whole
+            // robot exactly as one in the body itself would.
             carriedHole = hit;
+            carriedHole.Face = new HoleFace
+            {
+                localPosition = go.transform.InverseTransformPoint(hit.WorldPosition),
+                localNormal = go.transform.InverseTransformDirection(hit.WorldNormal),
+                width = hit.Face.width,
+            };
             snapTarget = default;
             rotatingAboutHole = false;
             holeRoll = 0f;
@@ -540,9 +563,39 @@ namespace VexDesigner.Parts
             }
 
             SuspendColliders(go);
+            SetAssemblyGhosted(true);
+        }
 
-            ghost = go.GetComponent<PartGhost>() ?? go.AddComponent<PartGhost>();
-            ghost.SetGhosted(true);
+        /// <summary>
+        /// Turns the whole assembly to glass, not just the part in hand.
+        ///
+        /// A bolted robot held by one of its channels is a single object, and
+        /// ghosting one part of it would say otherwise - as well as leaving
+        /// most of the join the user is trying to judge still opaque.
+        /// </summary>
+        private void SetAssemblyGhosted(bool ghosted)
+        {
+            PartGroup group = carriedInstance?.Group;
+
+            if (group == null)
+            {
+                return;
+            }
+
+            foreach (PartInstance part in group.Members)
+            {
+                if (part == null)
+                {
+                    continue;
+                }
+
+                var partGhost = part.GetComponent<PartGhost>()
+                    ?? part.gameObject.AddComponent<PartGhost>();
+
+                partGhost.SetGhosted(ghosted);
+            }
+
+            ghost = ghosted ? carried.GetComponent<PartGhost>() : null;
         }
 
         private void UpdateHoleCarry()
@@ -688,7 +741,7 @@ namespace VexDesigner.Parts
         /// </summary>
         private bool TryScrewSeat()
         {
-            var screw = RaycastNearest<PlacedScrew>();
+            PlacedScrew screw = AimedScrew();
 
             if (screw == null || carriedHoles == null || !carriedHoles.HasHoles)
             {
@@ -975,7 +1028,7 @@ namespace VexDesigner.Parts
                     holeCarryStartPosition, holeCarryStartRotation);
             }
 
-            ghost?.SetGhosted(false);
+            SetAssemblyGhosted(false);
             ghost = null;
 
             StopHoleRotation();
@@ -1432,12 +1485,7 @@ namespace VexDesigner.Parts
 
         private bool UpdateNutPreview(PartDefinition definition)
         {
-            // The *nearest* thing under the crosshair has to be the screw, not
-            // merely the nearest screw. Most of a driven screw is inside the
-            // metal it holds, and picking it through a plate would let a nut be
-            // seated by pointing at a part two inches away from where the screw
-            // is actually exposed.
-            var screw = RaycastNearest<PlacedScrew>();
+            PlacedScrew screw = AimedScrew();
 
             if (screw == null)
             {
@@ -2032,6 +2080,88 @@ namespace VexDesigner.Parts
         /// anything lacking the component. Both are wanted: reaching a part
         /// behind the bench is right, reaching a screw behind a plate is not.
         /// </summary>
+        /// <summary>
+        /// The placed screw the user is pointing at, found by how near the aim
+        /// passes to it rather than by what it hits.
+        ///
+        /// A screw is four millimetres across and most of its length is inside
+        /// the metal it holds, so requiring the ray to strike its collider as
+        /// the nearest thing in the scene made short screws impossible to
+        /// address at all - the surrounding part is always in the way, and on a
+        /// screw that does not protrude there is nothing exposed to hit.
+        ///
+        /// Measuring to the screw's *axis* asks the question the user is
+        /// actually asking, which is "that screw, there".
+        /// </summary>
+        private PlacedScrew AimedScrew()
+        {
+            Ray ray = pointer.AimRay;
+
+            PlacedScrew best = null;
+            float bestAlong = float.MaxValue;
+
+            IReadOnlyList<PlacedScrew> screws = PlacedScrew.All;
+
+            for (int i = 0; i < screws.Count; i++)
+            {
+                PlacedScrew screw = screws[i];
+
+                if (screw == null || IsCarriedCollider(screw.GetComponent<Collider>()))
+                {
+                    continue;
+                }
+
+                Vector3 seat = screw.Seat;
+                Vector3 direction = screw.Direction;
+
+                // Head included: pointing at the head is pointing at the screw,
+                // and on a short one the head is most of what can be seen.
+                float headBack = screw.HeadHeight;
+
+                float nearest = float.MaxValue;
+                float along = 0f;
+
+                // Sampled along the shank rather than solved, because the
+                // segment is short and the closest-approach solution needs
+                // clamping and special cases for a ray nearly parallel to it.
+                const int samples = 12;
+
+                for (int s = 0; s <= samples; s++)
+                {
+                    float t = Mathf.Lerp(-headBack, screw.Length, s / (float)samples);
+                    Vector3 point = seat + (direction * t);
+
+                    Vector3 offset = point - ray.origin;
+                    float depth = Vector3.Dot(offset, ray.direction);
+
+                    if (depth <= 0f)
+                    {
+                        continue;
+                    }
+
+                    float miss = (offset - (ray.direction * depth)).magnitude;
+
+                    if (miss < nearest)
+                    {
+                        nearest = miss;
+                        along = depth;
+                    }
+                }
+
+                // Generously wide - about a quarter inch, twice the shank - so
+                // a screw can be pointed at rather than aimed at.
+                if (nearest > screwAimTolerance || along >= bestAlong)
+                {
+                    continue;
+                }
+
+                best = screw;
+                bestAlong = along;
+            }
+
+            return best;
+        }
+
         private T RaycastNearest<T>() where T : class
         {
             int count = Physics.RaycastNonAlloc(

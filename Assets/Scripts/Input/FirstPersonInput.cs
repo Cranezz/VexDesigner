@@ -110,8 +110,30 @@ namespace VexDesigner.InputSources
         public void SetCursorLocked(bool locked)
         {
             CursorLocked = locked;
-            Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !locked;
+            ApplyCursorState();
+        }
+
+        /// <summary>
+        /// Frees or captures the real mouse.
+        ///
+        /// Two different things were being conflated. <see cref="CursorLocked"/>
+        /// means "the game has the input" and gates every click and keypress;
+        /// whether the operating system's pointer is captured is a separate
+        /// question, and during a dial drag the answer is different for each -
+        /// the game still wants the clicks, and the user wants to see where
+        /// they are pointing.
+        ///
+        /// Drawing a pointer in the HUD was the first attempt at that, and it
+        /// was the wrong answer: a second cursor that does not match the one
+        /// the operating system draws is worse than no cursor, and it was the
+        /// wrong size besides.
+        /// </summary>
+        private void ApplyCursorState()
+        {
+            bool free = PointerVisible || !CursorLocked;
+
+            Cursor.lockState = free ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = free;
         }
 
         private void Update()
@@ -261,8 +283,14 @@ namespace VexDesigner.InputSources
             RepeatModifierHeld = keyboard != null &&
                 (keyboard.leftAltKey.isPressed || keyboard.rightAltKey.isPressed);
 
+            // The interface only steals the pointer when the game has let go of
+            // it. During a dial drag the cursor is free so the user can see it,
+            // but the drag still owns the mouse - and without this exception,
+            // dragging over a line of on-screen text would hand the gesture to
+            // the HUD and abandon the rotation half-finished.
             IsOverInterface = !CursorLocked ||
-                (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject());
+                (!PointerVisible && EventSystem.current != null &&
+                 EventSystem.current.IsPointerOverGameObject());
         }
 
         /// <summary>
@@ -276,25 +304,18 @@ namespace VexDesigner.InputSources
         /// </summary>
         private void MovePointer(Camera cam, Mouse mouse)
         {
-            if (!PointerVisible)
+            if (!PointerVisible || mouse == null)
             {
                 PointerScreenPosition = new Vector2(Screen.width, Screen.height) * 0.5f;
                 PointerRay = AimRay;
                 return;
             }
 
-            if (mouse != null)
-            {
-                Vector2 delta = mouse.delta.ReadValue();
-
-                // Y is inverted against the look control on purpose. Look is a
-                // head turning; this is a cursor, and a cursor that goes down
-                // when the mouse goes up is simply wrong.
-                PointerScreenPosition = new Vector2(
-                    Mathf.Clamp(PointerScreenPosition.x + delta.x, 0f, Screen.width),
-                    Mathf.Clamp(PointerScreenPosition.y + delta.y, 0f, Screen.height));
-            }
-
+            // Read straight off the real cursor. Accumulating mouse deltas into
+            // a position of our own was how the HUD pointer worked, and it
+            // drifted away from where the operating system thought the cursor
+            // was the moment either one hit an edge.
+            PointerScreenPosition = mouse.position.ReadValue();
             PointerRay = cam.ScreenPointToRay(PointerScreenPosition);
         }
 
@@ -306,11 +327,7 @@ namespace VexDesigner.InputSources
             }
 
             PointerVisible = visible;
-
-            if (visible)
-            {
-                PointerScreenPosition = new Vector2(Screen.width, Screen.height) * 0.5f;
-            }
+            ApplyCursorState();
         }
 
         public void PlacePointer(Vector2 screenPosition)
@@ -318,6 +335,11 @@ namespace VexDesigner.InputSources
             PointerScreenPosition = new Vector2(
                 Mathf.Clamp(screenPosition.x, 0f, Screen.width),
                 Mathf.Clamp(screenPosition.y, 0f, Screen.height));
+
+            // Moves the real cursor, so the gesture starts under the user's
+            // hand rather than jumping whatever it drives to wherever the
+            // cursor happened to be left.
+            Mouse.current?.WarpCursorPosition(PointerScreenPosition);
 
             Camera cam = ResolveCamera();
             if (cam != null)
