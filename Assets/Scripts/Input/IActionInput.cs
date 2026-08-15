@@ -48,5 +48,17 @@ namespace VexDesigner.InputSources
 
         /// <summary>Toggle the rotation ring while a hole is snapped.</summary>
         bool RotateModifierPressed { get; }
+
+        /// <summary>
+        /// Use the machine being looked at - the saw, for now.
+        ///
+        /// Named for the intent rather than for the key, like everything else
+        /// here, because a VR controller has no E to press but does have a
+        /// perfectly good notion of "use this".
+        /// </summary>
+        bool UsePressed { get; }
+
+        /// <summary>Back out of whatever is open.</summary>
+        bool CancelPressed { get; }
     }
 }

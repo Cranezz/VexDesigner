@@ -88,6 +88,12 @@ namespace VexDesigner.InputSources
         /// <summary>Toggles the rotation ring while a hole is snapped.</summary>
         public bool RotateModifierPressed { get; private set; }
 
+        /// <summary>Use the machine being looked at.</summary>
+        public bool UsePressed { get; private set; }
+
+        /// <summary>Back out of whatever is open.</summary>
+        public bool CancelPressed { get; private set; }
+
         private VexDesigner.Parts.InteractionLock interactionLock;
 
         private void Awake()
@@ -178,6 +184,8 @@ namespace VexDesigner.InputSources
                 SnapHeld = false;
                 FarSideHeld = false;
                 RotateModifierPressed = false;
+                UsePressed = false;
+                CancelPressed = false;
                 return;
             }
 
@@ -198,6 +206,9 @@ namespace VexDesigner.InputSources
             // because there is no jumping - this is a workshop, and hopping
             // around a bench full of small parts serves nothing.
             FarSideHeld = keyboard.spaceKey.isPressed;
+
+            UsePressed = keyboard.eKey.wasPressedThisFrame;
+            CancelPressed = keyboard.escapeKey.wasPressedThisFrame;
         }
 
         private void ReadLook(Mouse mouse)

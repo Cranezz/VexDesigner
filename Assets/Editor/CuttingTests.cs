@@ -37,6 +37,8 @@ namespace VexDesigner.EditorTools
             CutRemovesTheHolesItPassesThrough();
             CutsReplayIdentically();
             UndoRestoresTheWholePart();
+            SawSetsUpAndCuts();
+            TypedMeasurements();
 
             if (failures == 0)
             {
@@ -312,6 +314,140 @@ namespace VexDesigner.EditorTools
             {
                 Object.DestroyImmediate(go);
             }
+        }
+
+        /// <summary>
+        /// The machine end to end: dock a channel, feed it past the blade,
+        /// press cut, and check the part is shorter by exactly that much.
+        /// </summary>
+        private static void SawSetsUpAndCuts()
+        {
+            PartDefinition definition = Load("CCHL-2");
+
+            if (definition == null)
+            {
+                return;
+            }
+
+            var sawGo = new GameObject("TestSaw");
+            GameObject partGo = PartFactory.Create(definition, withPhysics: false);
+
+            try
+            {
+                var saw = sawGo.AddComponent<SawStation>();
+
+                // The builder sets these from the geometry it lays out; here
+                // they are set directly so the test is about the maths rather
+                // than about the furniture.
+                var so = new SerializedObject(saw);
+                so.FindProperty("bedY").floatValue = 0f;
+                so.FindProperty("fenceZ").floatValue = 0f;
+                so.FindProperty("bladeX").floatValue = 0f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+
+                var part = partGo.GetComponent<PartInstance>();
+
+                True("the channel can be docked", saw.Dock(part));
+
+                float before = saw.StockLengthInches;
+                Near("a 35-hole channel is 17.5 in", before, 17.5f, 0.02f);
+
+                // Sitting on the bed and against the fence, and nowhere near
+                // through either.
+                CheckSeated(saw, sawGo.transform, partGo, "square");
+
+                // Turned to an awkward angle, it must lift and still touch.
+                saw.SetRotation(2, 30f);
+                CheckSeated(saw, sawGo.transform, partGo, "turned 30 degrees");
+
+                saw.SetRotation(2, 0f);
+
+                // Feed three inches past the blade and take it off.
+                saw.SetFeed(3f);
+                Near("the feed reads back", saw.FeedInches, 3f, 0.0001f);
+
+                True("the cut is taken", saw.Cut());
+
+                float after = saw.StockLengthInches;
+
+                Near("the stock is three inches shorter", after, before - 3f, 0.02f);
+                Near("and the feed returns to zero", saw.FeedInches, 0f, 0.0001f);
+
+                CheckSeated(saw, sawGo.transform, partGo, "after cutting");
+
+                Debug.Log(
+                    $"[CuttingTests] saw: {before:0.000} in of stock, cut 3.000 in off, " +
+                    $"{after:0.000} in left.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(partGo);
+                Object.DestroyImmediate(sawGo);
+            }
+        }
+
+        /// <summary>
+        /// The stock must touch the bed and the fence and pass through
+        /// neither, whatever it has been turned to.
+        /// </summary>
+        private static void CheckSeated(
+            SawStation saw, Transform sawTransform, GameObject partGo, string what)
+        {
+            Mesh mesh = partGo.GetComponent<MeshFilter>().sharedMesh;
+            Bounds local = mesh.bounds;
+
+            Matrix4x4 toSaw = sawTransform.worldToLocalMatrix *
+                partGo.transform.localToWorldMatrix;
+
+            float lowest = float.MaxValue;
+            float furthestBack = float.MinValue;
+
+            for (int i = 0; i < 8; i++)
+            {
+                var corner = new Vector3(
+                    local.center.x + ((i & 1) == 0 ? -local.extents.x : local.extents.x),
+                    local.center.y + ((i & 2) == 0 ? -local.extents.y : local.extents.y),
+                    local.center.z + ((i & 4) == 0 ? -local.extents.z : local.extents.z));
+
+                Vector3 inSaw = toSaw.MultiplyPoint3x4(corner);
+
+                lowest = Mathf.Min(lowest, inSaw.y);
+                furthestBack = Mathf.Max(furthestBack, inSaw.z);
+            }
+
+            Near($"stock rests on the bed ({what})", lowest, 0f, 1e-5f);
+            Near($"stock rests against the fence ({what})", furthestBack, 0f, 1e-5f);
+        }
+
+        /// <summary>
+        /// The keypad has to read what a builder would write, including the
+        /// way lengths are actually said aloud.
+        /// </summary>
+        private static void TypedMeasurements()
+        {
+            Near("a decimal reads back",
+                VexDesigner.UI.SawInterface.ParseInches("7.317", 0f), 7.317f, 1e-4f);
+
+            Near("a whole number and a fraction adds up",
+                VexDesigner.UI.SawInterface.ParseInches("7 5/16", 0f), 7.3125f, 1e-4f);
+
+            Near("a bare fraction works",
+                VexDesigner.UI.SawInterface.ParseInches("3/8", 0f), 0.375f, 1e-4f);
+
+            Near("inch marks are ignored",
+                VexDesigner.UI.SawInterface.ParseInches("2.5\"", 0f), 2.5f, 1e-4f);
+
+            Near("nonsense keeps what was there",
+                VexDesigner.UI.SawInterface.ParseInches("banana", 4.25f), 4.25f, 1e-4f);
+
+            Near("a negative angle folds round",
+                VexDesigner.UI.SawInterface.ParseDegrees("-45", 0f), 315f, 1e-3f);
+
+            Near("more than a full turn folds too",
+                VexDesigner.UI.SawInterface.ParseDegrees("450", 0f), 90f, 1e-3f);
+
+            Near("and a plain angle is itself",
+                VexDesigner.UI.SawInterface.ParseDegrees("37.5", 0f), 37.5f, 1e-3f);
         }
 
         // ------------------------------------------------------------------

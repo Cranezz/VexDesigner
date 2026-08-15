@@ -5,6 +5,7 @@ namespace VexDesigner.EditorTools
     using UnityEditor.SceneManagement;
     using UnityEngine;
     using UnityEngine.SceneManagement;
+    using TMPro;
     using UnityEngine.UI;
     using VexDesigner.InputSources;
     using VexDesigner.Parts;
@@ -129,6 +130,7 @@ namespace VexDesigner.EditorTools
             BuildWorkTable();
             BuildMat();
             BuildShelf();
+            BuildSaw();
             BuildPlayer();
             BuildInterface();
             BuildMeasurementDisplay();
@@ -316,6 +318,28 @@ namespace VexDesigner.EditorTools
         // Player
         // ------------------------------------------------------------------
 
+        /// <summary>
+        /// Puts the saw on the right-hand end of the bench.
+        ///
+        /// At the end rather than in the middle for the reason a real one is:
+        /// stock has to hang off both sides of the blade, and a 35-hole
+        /// C-channel is nearly a foot and a half long. The end of the bench
+        /// gives it somewhere to hang.
+        /// </summary>
+        private static void BuildSaw()
+        {
+            float top = In(TableHeightIn);
+
+            // Turned to face the room, so the fence is at the back from the
+            // player's side and the stock feeds left to right.
+            SawStationBuilder.Build(
+                new Vector3(
+                    In(TableWidthIn * 0.5f - 18f),
+                    top,
+                    In(TableCentreZIn) - In(TableDepthIn * 0.5f) + In(6f)),
+                Quaternion.identity);
+        }
+
         private static void BuildPlayer()
         {
             // Global physics settings, applied before anything spawns. Unity's
@@ -391,6 +415,7 @@ namespace VexDesigner.EditorTools
             // enabled at a time - they cannot share the primary click - and G
             // swaps between them.
             player.AddComponent<TransformToolController>();
+            player.AddComponent<SawController>();
 
             // Spawn point is baked in rather than read back from the room
             // builder at runtime, because that builder is editor-only code and
@@ -510,6 +535,8 @@ namespace VexDesigner.EditorTools
             padlock.GetComponent<Image>().color = new Color(0.62f, 0.8f, 1f, 0.9f);
             padlock.GetComponent<Image>().enabled = false;
 
+            GameObject prompt = BuildUsePrompt(canvasGo.transform);
+
             BuildKeybindHints(canvasGo.transform);
             BuildMessageBanner(canvasGo.transform);
             BuildDeletionPreview(canvasGo.transform);
@@ -519,7 +546,11 @@ namespace VexDesigner.EditorTools
             var so = new SerializedObject(crosshair);
             so.FindProperty("dot").objectReferenceValue = dot.GetComponent<Image>();
             so.FindProperty("padlock").objectReferenceValue = padlock.GetComponent<Image>();
+            so.FindProperty("usePrompt").objectReferenceValue =
+                prompt.GetComponent<TMPro.TextMeshProUGUI>();
             so.ApplyModifiedPropertiesWithoutUndo();
+
+            BuildSawPanel(canvasGo.transform);
 
             // An EventSystem is required for any UI interaction. Without one
             // the pause menu's buttons would render but never respond.
@@ -676,6 +707,205 @@ namespace VexDesigner.EditorTools
             go.AddComponent<KeybindHints>();
         }
 
+        /// <summary>
+        /// The "press E" line, just under the crosshair.
+        ///
+        /// Below rather than beside it, and small, because it appears while
+        /// the user is aiming at something and must not sit on top of what
+        /// they are aiming at.
+        /// </summary>
+        private static GameObject BuildUsePrompt(Transform parent)
+        {
+            var go = new GameObject("UsePrompt", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(0f, -42f);
+            rect.sizeDelta = new Vector2(420f, 30f);
+
+            var text = go.AddComponent<TMPro.TextMeshProUGUI>();
+            text.fontSize = 20f;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.color = new Color(1f, 0.95f, 0.75f);
+            text.raycastTarget = false;
+            text.enabled = false;
+
+            return go;
+        }
+
+        /// <summary>
+        /// The saw's readouts and keypad, down the right-hand side.
+        ///
+        /// Hidden until the saw is opened, and built here rather than by hand
+        /// for the same reason as the rest of the scene: a panel of fifteen
+        /// wired-up components is not reviewable as a scene file.
+        /// </summary>
+        private static void BuildSawPanel(Transform parent)
+        {
+            var panel = new GameObject("SawPanel", typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(parent, false);
+
+            var rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.anchoredPosition = new Vector2(-24f, 0f);
+            rect.sizeDelta = new Vector2(430f, 470f);
+
+            panel.GetComponent<Image>().color = new Color(0.07f, 0.08f, 0.10f, 0.88f);
+
+            var layout = panel.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(18, 18, 18, 18);
+            layout.spacing = 10f;
+            layout.childControlHeight = false;
+            layout.childForceExpandHeight = false;
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+
+            TMPro.TextMeshProUGUI Heading(string content, float size, Color colour)
+            {
+                var go = new GameObject("Line", typeof(RectTransform));
+                go.transform.SetParent(panel.transform, false);
+                go.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, size * 1.5f);
+
+                var text = go.AddComponent<TMPro.TextMeshProUGUI>();
+                text.text = content;
+                text.fontSize = size;
+                text.color = colour;
+                text.raycastTarget = false;
+
+                var element = go.AddComponent<LayoutElement>();
+                element.minHeight = size * 1.5f;
+                element.preferredHeight = size * 1.5f;
+
+                return text;
+            }
+
+            Heading("TABLE SAW", 26f, new Color(1f, 0.85f, 0.3f));
+
+            TMPro.TextMeshProUGUI stock = Heading("", 17f, new Color(0.8f, 0.85f, 0.9f));
+            TMPro.TextMeshProUGUI feed = Heading("", 22f, Color.white);
+            TMPro.TextMeshProUGUI blade = Heading("", 22f, Color.white);
+            TMPro.TextMeshProUGUI rotation = Heading("", 18f, Color.white);
+
+            TMP_InputField Field(string label)
+            {
+                var row = new GameObject(label + "Row", typeof(RectTransform));
+                row.transform.SetParent(panel.transform, false);
+
+                var rowLayout = row.AddComponent<HorizontalLayoutGroup>();
+                rowLayout.spacing = 8f;
+                rowLayout.childControlWidth = true;
+                rowLayout.childForceExpandWidth = false;
+                rowLayout.childControlHeight = true;
+
+                var rowElement = row.AddComponent<LayoutElement>();
+                rowElement.minHeight = 34f;
+                rowElement.preferredHeight = 34f;
+
+                var caption = new GameObject("Caption", typeof(RectTransform));
+                caption.transform.SetParent(row.transform, false);
+
+                var captionText = caption.AddComponent<TMPro.TextMeshProUGUI>();
+                captionText.text = label;
+                captionText.fontSize = 17f;
+                captionText.color = new Color(0.7f, 0.75f, 0.82f);
+                captionText.alignment = TMPro.TextAlignmentOptions.MidlineLeft;
+                captionText.raycastTarget = false;
+
+                var captionElement = caption.AddComponent<LayoutElement>();
+                captionElement.minWidth = 150f;
+                captionElement.preferredWidth = 150f;
+                captionElement.minHeight = 30f;
+
+                var field = new GameObject(label, typeof(RectTransform), typeof(Image));
+                field.transform.SetParent(row.transform, false);
+                field.GetComponent<Image>().color = new Color(0.15f, 0.16f, 0.19f);
+
+                var fieldElement = field.AddComponent<LayoutElement>();
+                fieldElement.minWidth = 190f;
+                fieldElement.preferredWidth = 190f;
+                fieldElement.minHeight = 30f;
+
+                var viewport = new GameObject("Text", typeof(RectTransform));
+                viewport.transform.SetParent(field.transform, false);
+
+                var viewportRect = viewport.GetComponent<RectTransform>();
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = new Vector2(8f, 2f);
+                viewportRect.offsetMax = new Vector2(-8f, -2f);
+
+                var viewportText = viewport.AddComponent<TMPro.TextMeshProUGUI>();
+                viewportText.fontSize = 18f;
+                viewportText.color = Color.white;
+                viewportText.alignment = TMPro.TextAlignmentOptions.MidlineLeft;
+
+                var input = field.AddComponent<TMP_InputField>();
+                input.textComponent = viewportText;
+                input.textViewport = viewportRect;
+
+                return input;
+            }
+
+            TMP_InputField feedField = Field("Feed (in)");
+            TMP_InputField bladeField = Field("Blade (deg)");
+            TMP_InputField rotateX = Field("Turn X (deg)");
+            TMP_InputField rotateY = Field("Turn Y (deg)");
+            TMP_InputField rotateZ = Field("Turn Z (deg)");
+
+            var buttonGo = new GameObject("Cut", typeof(RectTransform), typeof(Image));
+            buttonGo.transform.SetParent(panel.transform, false);
+            buttonGo.GetComponent<Image>().color = new Color(0.75f, 0.2f, 0.18f);
+
+            var buttonElement = buttonGo.AddComponent<LayoutElement>();
+            buttonElement.minHeight = 48f;
+            buttonElement.preferredHeight = 48f;
+
+            var buttonLabel = new GameObject("Label", typeof(RectTransform));
+            buttonLabel.transform.SetParent(buttonGo.transform, false);
+
+            var labelRect = buttonLabel.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+
+            var labelText = buttonLabel.AddComponent<TMPro.TextMeshProUGUI>();
+            labelText.text = "CUT";
+            labelText.fontSize = 26f;
+            labelText.alignment = TMPro.TextAlignmentOptions.Center;
+            labelText.raycastTarget = false;
+
+            var button = buttonGo.AddComponent<Button>();
+            button.targetGraphic = buttonGo.GetComponent<Image>();
+
+            TMPro.TextMeshProUGUI hint = Heading("", 14f, new Color(0.6f, 0.65f, 0.72f));
+            hint.enableWordWrapping = true;
+            hint.GetComponent<LayoutElement>().preferredHeight = 60f;
+
+            var saw = panel.AddComponent<VexDesigner.UI.SawInterface>();
+            var so = new SerializedObject(saw);
+
+            so.FindProperty("panel").objectReferenceValue = panel;
+            so.FindProperty("feedLabel").objectReferenceValue = feed;
+            so.FindProperty("bladeLabel").objectReferenceValue = blade;
+            so.FindProperty("rotationLabel").objectReferenceValue = rotation;
+            so.FindProperty("stockLabel").objectReferenceValue = stock;
+            so.FindProperty("hintLabel").objectReferenceValue = hint;
+            so.FindProperty("feedField").objectReferenceValue = feedField;
+            so.FindProperty("bladeField").objectReferenceValue = bladeField;
+            so.FindProperty("rotateXField").objectReferenceValue = rotateX;
+            so.FindProperty("rotateYField").objectReferenceValue = rotateY;
+            so.FindProperty("rotateZField").objectReferenceValue = rotateZ;
+            so.FindProperty("cutButton").objectReferenceValue = button;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            panel.SetActive(false);
+        }
+
         private static GameObject CreateHudImage(Transform parent, string name, float size)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -739,6 +969,7 @@ namespace VexDesigner.EditorTools
                 "VexDesigner/GizmoTransparent",
                 "VexDesigner/PartOutline",
                 "VexDesigner/PartOutlineMask",
+                "VexDesigner/SawPreview",
             };
 
             foreach (string name in required)

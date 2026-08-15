@@ -41,9 +41,24 @@ namespace VexDesigner.UI
             Close();
         }
 
+        private VexDesigner.Parts.SawController saw;
+
         private void Update()
         {
             Keyboard keyboard = Keyboard.current;
+            if (saw == null)
+            {
+                saw = FindAnyObjectByType<VexDesigner.Parts.SawController>();
+            }
+
+            // The saw is a mode with its own way out, and Escape is it. A
+            // menu that opened over the machine instead would make leaving it
+            // a two-step affair for no reason.
+            if (saw != null && saw.IsOpen)
+            {
+                return;
+            }
+
             if (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)
             {
                 return;

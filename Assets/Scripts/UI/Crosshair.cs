@@ -28,6 +28,11 @@ namespace VexDesigner.UI
     {
         [SerializeField] private Image dot;
         [SerializeField] private Image padlock;
+
+        [Tooltip("Shown under the crosshair when a machine is within reach.")]
+        [SerializeField] private TMPro.TextMeshProUGUI usePrompt;
+
+        private VexDesigner.Parts.SawController saw;
         [SerializeField] private PartPlacementController placement;
         [SerializeField] private TransformToolController transformTool;
 
@@ -62,6 +67,8 @@ namespace VexDesigner.UI
                 return;
             }
 
+            UpdateUsePrompt();
+
             // Hidden entirely while turning a gizmo ring or a hole dial: the
             // view is locked and the mouse is driving the rotation, so a
             // crosshair fixed to the middle of the screen points at nothing and
@@ -93,6 +100,41 @@ namespace VexDesigner.UI
             if (padlock != null)
             {
                 padlock.enabled = placement.IsCarrying && placement.CarriedIsFrozen;
+            }
+        }
+
+        /// <summary>
+        /// Offers the machine under the crosshair, by name of the key that
+        /// takes it.
+        ///
+        /// Only when it is genuinely usable - near enough and looked at - so
+        /// the prompt is a statement about right now rather than a label that
+        /// lives on the screen.
+        /// </summary>
+        private void UpdateUsePrompt()
+        {
+            if (usePrompt == null)
+            {
+                return;
+            }
+
+            if (saw == null)
+            {
+                saw = FindAnyObjectByType<VexDesigner.Parts.SawController>();
+            }
+
+            bool offer = saw != null && !saw.IsOpen && saw.Available != null;
+
+            if (usePrompt.enabled != offer)
+            {
+                usePrompt.enabled = offer;
+            }
+
+            if (offer)
+            {
+                usePrompt.text = saw.Available.HasPart
+                    ? "<b>E</b>  Set up a cut"
+                    : "<b>E</b>  Use the saw";
             }
         }
 

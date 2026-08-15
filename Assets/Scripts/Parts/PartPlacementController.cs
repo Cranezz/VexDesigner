@@ -24,6 +24,10 @@ namespace VexDesigner.Parts
         [Tooltip("How far the aim ray reaches, in world units.")]
         [SerializeField] private float aimDistance = 12f;
 
+        [Tooltip("How near a saw a part must be set down to be loaded into it, " +
+                 "in metres. Roughly the size of the machine's bed.")]
+        [SerializeField] private float dockRange = 0.55f;
+
         [Header("Carry")]
         [Tooltip("Closest a carried part can be drawn in, in metres.\n\n" +
                  "About three inches: near enough to put an eye to a join, and " +
@@ -1876,6 +1880,11 @@ namespace VexDesigner.Parts
             PartGroup group = carriedInstance?.Group;
             float heldAt = carryDistance;
 
+            // Set down over the saw, it goes into the saw. Dropping stock on a
+            // machine is how a machine is loaded, and asking for a separate
+            // gesture to say so would be asking twice.
+            TryDockOnSaw(carriedInstance);
+
             IgnorePlayerCollision(false);
 
             // Back in the world, so back in the graph. A nut set down on the
@@ -2217,6 +2226,44 @@ namespace VexDesigner.Parts
                 {
                     Physics.IgnoreCollision(collider, self, ignore);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Loads a part into a saw if it was let go over one.
+        /// </summary>
+        private void TryDockOnSaw(PartInstance part)
+        {
+            if (part == null || part.Definition == null || !part.Definition.cuttable)
+            {
+                return;
+            }
+
+            SawStation best = null;
+            float nearest = float.MaxValue;
+
+            foreach (SawStation saw in SawStation.All)
+            {
+                if (saw == null || saw.HasPart)
+                {
+                    continue;
+                }
+
+                // Measured to the bed rather than to the object, so a long
+                // C-channel hanging off both ends still counts as being on it.
+                float distance = Vector3.Distance(
+                    saw.transform.position, part.transform.position);
+
+                if (distance < dockRange && distance < nearest)
+                {
+                    nearest = distance;
+                    best = saw;
+                }
+            }
+
+            if (best != null && best.Dock(part))
+            {
+                MessageBanner.Info("On the saw — press E to set up a cut");
             }
         }
 
