@@ -77,13 +77,17 @@ namespace VexDesigner.Parts
         /// <summary>
         /// Where a nut goes on a screw, given where on it the user is pointing.
         ///
-        /// Two answers are possible and both are right. By default the nut goes
-        /// on the end, tightened up against the last piece of metal - which is
-        /// what a nut is for and what happens ninety-nine times in a hundred.
-        /// But a screw with a gap in the middle of its stack can take a nut in
-        /// that gap, clamping only what is above it and leaving the rest of the
-        /// shank free. That is a real thing to do with a real screw, so pointing
-        /// at that stretch of shank offers it.
+        /// A nut is tightened up against whatever is above it, so the answer
+        /// is always the top of some stretch of bare shank. Which stretch is
+        /// decided by where the user is pointing - a screw with a gap in the
+        /// middle of its stack can take a nut in that gap, clamping only what
+        /// is above it and leaving the rest of the shank free, which is a real
+        /// thing to do with a real screw.
+        ///
+        /// Pointing somewhere a nut cannot go - at the head, at metal, past the
+        /// end - is not a refusal. The nearest place it *can* go is offered
+        /// instead, because the user is plainly asking for a nut on this screw
+        /// and there is only ever one sensible answer to that.
         /// </summary>
         /// <param name="aim">Ray the user is pointing with.</param>
         public static NutSeating FindNutSeating(
@@ -133,60 +137,54 @@ namespace VexDesigner.Parts
             // of the aim ray to the screw's own line.
             float pointed = Mathf.Clamp(ClosestApproach(aim, seat, direction), 0f, length);
 
+            // Every stretch of bare shank the nut actually fits on. Gaps too
+            // short to take it are not options and are left out here, rather
+            // than picked and then rejected - which is what used to happen, and
+            // why looking near the head of a short screw offered nothing at all
+            // instead of offering the one place that would have worked.
             float distance = -1f;
             bool inGap = false;
+            float nearest = float.MaxValue;
 
             for (int i = 0; i < gaps.Count; i++)
             {
                 Vector2 gap = gaps[i];
 
-                if (pointed < gap.x - 1e-4f || pointed > gap.y + 1e-4f)
+                if (gap.x + thickness > length + 1e-4f)
                 {
                     continue;
                 }
 
-                // The nut tightens up against whatever is above it, so it seats
-                // at the top of the gap rather than wherever the cursor happens
-                // to be. A nut floating in mid-shank holds nothing.
-                distance = gap.x;
+                // How far the pointer is from this stretch of shank. Zero while
+                // it is on it, so pointing at a particular gap chooses that gap
+                // and pointing anywhere else - the head, the metal, past the
+                // end - falls to the nearest one that works.
+                float reach = pointed < gap.x
+                    ? gap.x - pointed
+                    : (pointed > gap.y ? pointed - gap.y : 0f);
 
-                // The last gap is the run past the final plate: that is the
-                // ordinary end-of-screw position, not a clamp in a gap.
-                inGap = i < gaps.Count - 1;
-                break;
+                if (reach < nearest)
+                {
+                    nearest = reach;
+                    distance = gap.x;
+
+                    // The last gap is the run past the final plate: the
+                    // ordinary end-of-screw position, not a clamp in a gap.
+                    inGap = i < gaps.Count - 1;
+                }
             }
 
             if (distance < 0f)
             {
-                // Pointing at metal. Take the nearest stretch of bare shank
-                // instead of jumping to the end - looking at the head of a
-                // screw that goes straight into a plate means the near side of
-                // that plate, not two inches further down.
-                //
-                // With no gaps at all, this is the end of the last plate; and
-                // on a bare screw that is zero, so the thing runs all the way
-                // up to the head. A nut on a screw holding nothing is
-                // tightened against the head, not left dangling.
-                distance = LastExit(screw);
-                float best = float.MaxValue;
-
-                for (int i = 0; i < gaps.Count; i++)
-                {
-                    float reach = Mathf.Min(
-                        Mathf.Abs(pointed - gaps[i].x), Mathf.Abs(pointed - gaps[i].y));
-
-                    if (reach < best)
-                    {
-                        best = reach;
-                        distance = gaps[i].x;
-                        inGap = i < gaps.Count - 1;
-                    }
-                }
+                // Nowhere on this screw will take it. Not an error - the user
+                // simply has the wrong nut or the wrong screw, which is obvious
+                // from looking at it.
+                return default;
             }
 
             seating.Distance = distance;
             seating.InGap = inGap;
-            seating.Fits = screw.NutFits(distance, thickness);
+            seating.Fits = true;
             seating.WorldPosition = seat + (direction * distance);
 
             // The nut's near face looks back up the screw, at the metal it is

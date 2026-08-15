@@ -268,7 +268,6 @@ namespace VexDesigner.Parts
                     part = part,
                     parent = part.transform.parent,
                     definition = part.Definition,
-                    wasKinematic = body != null && body.isKinematic,
                 });
 
                 // A child with its own Rigidbody stays a separate body no
@@ -314,8 +313,14 @@ namespace VexDesigner.Parts
 
                 if (body != null)
                 {
-                    body.isKinematic = IsFrozen || follower.wasKinematic;
-                    body.useGravity = !body.isKinematic;
+                    // Only the group's *current* state decides this. An earlier
+                    // version also remembered whether the part had been
+                    // kinematic when it was picked up, which meant unfreezing an
+                    // assembly while holding it unfroze the part in hand and
+                    // left the rest pinned: one part fell and the robot stayed
+                    // in the air.
+                    body.isKinematic = IsFrozen;
+                    body.useGravity = !IsFrozen;
                     body.linearVelocity = Vector3.zero;
                     body.angularVelocity = Vector3.zero;
                 }

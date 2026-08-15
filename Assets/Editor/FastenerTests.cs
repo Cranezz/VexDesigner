@@ -46,6 +46,7 @@ namespace VexDesigner.EditorTools
             Case(FrozenSurvivesUngrouping);
             Case(TightNutStillSeats);
             Case(ChainOfThreeStaysOneAssembly);
+            Case(NutSeatsWhereverYouPoint);
 
             if (failures == 0)
             {
@@ -311,7 +312,7 @@ namespace VexDesigner.EditorTools
             Ray aim = AimAt(placed, placed.Length * 0.95f);
             NutSeating seating = FastenerFitting.FindNutSeating(placed, nutDef, aim);
 
-            True("fit reported matches the arithmetic", seating.Fits == shouldFit);
+            True("a seat is offered exactly when one fits", seating.IsValid == shouldFit);
 
             // And a nut thicker than the whole screw must always be refused.
             True("an impossible nut is refused",
@@ -613,10 +614,8 @@ namespace VexDesigner.EditorTools
             NutSeating seating = FastenerFitting.FindNutSeating(screw, nutDef, aim);
 
             True("a tight nut is still offered a seat", seating.IsValid);
-            True("and fitting is reported correctly",
-                seating.Fits == (spare >= nutDef.fastener.thicknessInches - 0.0001f));
 
-            if (!seating.Fits)
+            if (!seating.IsValid)
             {
                 return;
             }
@@ -704,6 +703,73 @@ namespace VexDesigner.EditorTools
 
             // Seven: three channels, two screws, two nuts.
             Near("nothing was left behind", group.Members.Count, 7f, 0.1f);
+        }
+
+        /// <summary>
+        /// A nut must be offered a seat from anywhere on the screw.
+        ///
+        /// Pointing at the head, at the metal, or past the end are all just
+        /// ways of saying "put a nut on this screw", and there is only one
+        /// sensible answer to that. Refusing unless the cursor happened to
+        /// land on the one workable stretch of thread made short screws
+        /// impossible to fit at all.
+        /// </summary>
+        private static void NutSeatsWhereverYouPoint(List<GameObject> rubbish)
+        {
+            PartDefinition channelDef = Load("CCHL-2");
+            PartDefinition screwDef = Load("276-4992");   // 1/2 in
+            PartDefinition nutDef = Load("275-1028");
+
+            if (channelDef == null || screwDef == null || nutDef == null)
+            {
+                return;
+            }
+
+            GameObject channel = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            HoleHit hole = channel.GetComponent<PartHoles>().FaceAt(0, false);
+
+            PlacedScrew screw = DriveScrew(screwDef, hole, rubbish);
+            if (screw == null)
+            {
+                return;
+            }
+
+            float expected = 0f;
+            foreach (ScrewPass pass in screw.Passes)
+            {
+                expected = Mathf.Max(expected, pass.Exit);
+            }
+
+            // Right at the head, in the metal, and past the end. Every one of
+            // them has to give the same answer, because there is only one
+            // place on this screw a nut can go.
+            var wheres = new[] { 0f, 0.5f, 0.99f };
+
+            for (int i = 0; i < wheres.Length; i++)
+            {
+                Ray aim = AimAt(screw, screw.Length * wheres[i]);
+                NutSeating seating = FastenerFitting.FindNutSeating(screw, nutDef, aim);
+
+                True("a seat is offered at " + wheres[i] + " along", seating.IsValid);
+
+                if (seating.IsValid)
+                {
+                    Near("and it is the only one there is at " + wheres[i],
+                        seating.Distance, expected);
+                }
+            }
+
+            // A bare screw takes a nut right up against the head.
+            PartDefinition loneDef = Load("276-4996");
+            GameObject lone = Spawn(loneDef, new Vector3(2f, 0f, 0f), Quaternion.identity, rubbish);
+            var bare = lone.AddComponent<PlacedScrew>();
+            bare.RecomputePasses();
+
+            Ray bareAim = AimAt(bare, bare.Length * 0.5f);
+            NutSeating bareSeat = FastenerFitting.FindNutSeating(bare, nutDef, bareAim);
+
+            True("a bare screw takes a nut", bareSeat.IsValid);
+            Near("tightened against the head", bareSeat.Distance, 0f);
         }
 
         /// <summary>

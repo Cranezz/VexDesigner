@@ -22,6 +22,7 @@ namespace VexDesigner.Parts
 
         private Renderer[] renderers;
         private Material current;
+        private Material currentMask;
 
         public bool IsShowing => current != null;
 
@@ -48,10 +49,22 @@ namespace VexDesigner.Parts
             }
 
             current = material;
+            currentMask = MaskMaterial();
 
             foreach (Renderer renderer in Renderers())
             {
-                var materials = new List<Material>(renderer.sharedMaterials) { material };
+                var materials = new List<Material>(renderer.sharedMaterials);
+
+                // Mask first, border second, and their render queues put them
+                // in that order too. The border is drawn only where the mask
+                // is absent, so a mask that arrived afterwards would leave the
+                // part unoutlined for a frame and flicker.
+                if (currentMask != null)
+                {
+                    materials.Add(currentMask);
+                }
+
+                materials.Add(material);
                 renderer.sharedMaterials = materials.ToArray();
             }
         }
@@ -75,10 +88,17 @@ namespace VexDesigner.Parts
                 // Removed by identity, so a part that also had its materials
                 // swapped for the ghost does not lose the wrong one.
                 materials.Remove(current);
+
+                if (currentMask != null)
+                {
+                    materials.Remove(currentMask);
+                }
+
                 renderer.sharedMaterials = materials.ToArray();
             }
 
             current = null;
+            currentMask = null;
         }
 
         /// <summary>
@@ -109,6 +129,30 @@ namespace VexDesigner.Parts
 
             return renderers;
         }
+
+        /// <summary>
+        /// The stencil stamp that confines the border to the silhouette. One
+        /// for the whole workshop; it has no settings.
+        /// </summary>
+        private static Material MaskMaterial()
+        {
+            if (maskMaterial != null)
+            {
+                return maskMaterial;
+            }
+
+            Shader shader = Shader.Find("VexDesigner/PartOutlineMask");
+
+            if (shader == null)
+            {
+                return null;
+            }
+
+            maskMaterial = new Material(shader) { name = "PartOutlineMask" };
+            return maskMaterial;
+        }
+
+        private static Material maskMaterial;
 
         private static Material Resolve(Color colour, float thickness)
         {

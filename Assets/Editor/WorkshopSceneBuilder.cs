@@ -513,7 +513,7 @@ namespace VexDesigner.EditorTools
             // The free pointer, used while a rotation dial is up. Pivoted at
             // its own tip so it points at the position it is given rather than
             // straddling it.
-            GameObject pointer = CreateHudImage(canvasGo.transform, "Pointer", 26f);
+            GameObject pointer = CreateHudImage(canvasGo.transform, "Pointer", 16f);
             pointer.GetComponent<Image>().sprite = Crosshair.GetPointerSprite();
             pointer.GetComponent<RectTransform>().pivot = new Vector2(0f, 1f);
             pointer.GetComponent<Image>().enabled = false;
@@ -747,6 +747,7 @@ namespace VexDesigner.EditorTools
                 "VexDesigner/GizmoOverlay",
                 "VexDesigner/GizmoTransparent",
                 "VexDesigner/PartOutline",
+                "VexDesigner/PartOutlineMask",
             };
 
             foreach (string name in required)

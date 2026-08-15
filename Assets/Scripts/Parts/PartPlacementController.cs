@@ -380,21 +380,15 @@ namespace VexDesigner.Parts
         /// </summary>
         private void UpdateHoleAim()
         {
-            PartHoles holes = null;
-
-            if (hovered is PickupHandle handle)
-            {
-                holes = handle.GetComponent<PartHoles>();
-            }
-
             bool farSide = actions != null && actions.FarSideHeld;
 
-            if (holes == null || !holes.HasHoles ||
-                !holes.TryAim(pointer.AimRay, farSide, out HoleHit hit))
+            if (!TryAimAnyHole(pointer.AimRay, farSide, out HoleHit hit))
             {
                 ClearHoleAim();
                 return;
             }
+
+            PartHoles holes = hit.Part;
 
             aimedHole = hit;
 
@@ -418,6 +412,61 @@ namespace VexDesigner.Parts
             {
                 dimmed.HoverScale = partDimWhileAiming;
             }
+        }
+
+        /// <summary>
+        /// The nearest hole on any part along the ray.
+        ///
+        /// Every part the ray touches is asked, not just the one the hover test
+        /// settled on. Those are different questions and the difference showed:
+        /// aiming down a hole means the ray misses that part's metal
+        /// altogether, so the hover landed on whatever was *behind* it and the
+        /// hole selected was the one on the far side of the gap - reliably
+        /// picking the hole behind the one being aimed at.
+        ///
+        /// Asking every candidate and keeping the nearest makes "the first hole
+        /// along the ray" true by construction, which is the rule a person
+        /// would expect from pointing at something.
+        /// </summary>
+        private bool TryAimAnyHole(Ray ray, bool farSide, out HoleHit best)
+        {
+            best = default;
+
+            int count = Physics.RaycastNonAlloc(
+                ray, hits, aimDistance, ~0, QueryTriggerInteraction.Ignore);
+
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (IsCarriedCollider(hits[i].collider))
+                {
+                    continue;
+                }
+
+                var holes = hits[i].collider.GetComponentInParent<PartHoles>();
+
+                if (holes == null || !holes.HasHoles ||
+                    holes.GetComponent<PickupHandle>() is not { Interactable: true })
+                {
+                    continue;
+                }
+
+                if (!holes.TryAim(ray, farSide, out HoleHit hit))
+                {
+                    continue;
+                }
+
+                float along = Vector3.Dot(hit.WorldPosition - ray.origin, ray.direction);
+
+                if (along < bestDistance)
+                {
+                    bestDistance = along;
+                    best = hit;
+                }
+            }
+
+            return best.IsValid;
         }
 
         private void ClearHoleAim()

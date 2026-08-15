@@ -16,6 +16,13 @@ namespace VexDesigner.Parts
         {
             Move,
             Rotate,
+
+            /// <summary>
+            /// Trackball: rotation about whatever axis the drag implies rather
+            /// than about one fixed axis. Faster for a rough orientation, where
+            /// picking the right ring first is more work than the turn itself.
+            /// </summary>
+            Free,
         }
 
         [SerializeField] private Kind handleKind;

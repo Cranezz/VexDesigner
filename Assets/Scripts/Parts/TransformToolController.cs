@@ -388,7 +388,11 @@ namespace VexDesigner.Parts
 
             SortRotationRings();
 
-            Vector3 centre = PivotPoint;
+            // Pinned to where the drag began while a drag is running. The
+            // pivot is worked out from the selection's bounds, which change as
+            // the part turns - so recomputing it mid-rotation moved the gizmo
+            // a little every frame, and the gizmo visibly shook.
+            Vector3 centre = dragging != null ? dragOrigin : PivotPoint;
             gizmoRoot.transform.position = centre;
 
             gizmoRoot.transform.rotation = relativeAxes && selection.Members.Count > 0
@@ -592,6 +596,10 @@ namespace VexDesigner.Parts
                 // eye.
                 MeasurementDisplay.Show(dragStartCentre, selection.GetCentre());
             }
+            else if (dragging.HandleKind == TransformHandle.Kind.Free)
+            {
+                FreeRotate();
+            }
             else
             {
                 // Where the pointer is around the ring, measured from where it
@@ -632,6 +640,39 @@ namespace VexDesigner.Parts
         /// Draws the swept angle as a bright arc on the ring being turned, so
         /// how far the part has come is visible without counting.
         /// </summary>
+        /// <summary>
+        /// Trackball rotation: turns the part about whatever axis the drag
+        /// implies, relative to the viewer.
+        ///
+        /// Dragging sideways turns about the screen's vertical and up-and-down
+        /// about the screen's horizontal, so the part follows the hand the way
+        /// a ball under a fingertip would. Relative rather than absolute,
+        /// unlike the rings: there is no fixed circle to point at, so there is
+        /// nothing for a position to mean.
+        /// </summary>
+        private void FreeRotate()
+        {
+            Vector2 drag = pointer.DragDelta;
+
+            if (drag.sqrMagnitude < 1e-6f)
+            {
+                return;
+            }
+
+            Camera cam = Camera.main;
+
+            Vector3 right = cam != null ? cam.transform.right : Vector3.right;
+            Vector3 up = cam != null ? cam.transform.up : Vector3.up;
+
+            float rate = 0.35f * PrecisionFactor;
+
+            Quaternion turn =
+                Quaternion.AngleAxis(drag.x * rate, up) *
+                Quaternion.AngleAxis(-drag.y * rate, right);
+
+            selection.Rotate(turn, dragOrigin);
+        }
+
         private void DrawRotationArc()
         {
             if (arcRenderer == null || dragging == null || rotateStartRadial == Vector3.zero)
@@ -830,6 +871,7 @@ namespace VexDesigner.Parts
             CreateRotateHandle(Vector3.up, new Color(0.35f, 0.9f, 0.35f));
             CreateRotateHandle(Vector3.forward, new Color(0.3f, 0.5f, 1f));
 
+            CreateFreeHandle();
             BuildRotationArc();
 
             gizmoRoot.SetActive(false);
@@ -935,6 +977,50 @@ namespace VexDesigner.Parts
 
             root.AddComponent<TransformHandle>()
                 .Configure(TransformHandle.Kind.Rotate, axis, colour);
+        }
+
+        /// <summary>
+        /// The free-rotation ball: a faint sphere filling the rings, dragged to
+        /// turn the part about any axis at once.
+        ///
+        /// Sized just inside the rings so it never steals a click meant for
+        /// one of them - the rings are the precise tool and must stay reachable,
+        /// with the ball as the coarse fallback in the middle.
+        /// </summary>
+        private void CreateFreeHandle()
+        {
+            const float radius = 0.68f;
+
+            var root = new GameObject("Rotate_Free");
+            root.transform.SetParent(rotateHandles, false);
+
+            var visual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            visual.name = "Ball";
+            visual.transform.SetParent(root.transform, false);
+
+            // Unity's sphere primitive is one unit across, so its radius is a
+            // half - hence the doubling.
+            visual.transform.localScale = Vector3.one * (radius * 2f);
+            Object.Destroy(visual.GetComponent<Collider>());
+
+            Shader shader = Shader.Find("VexDesigner/GizmoTransparent");
+            if (shader != null)
+            {
+                var mat = new Material(shader) { name = "GizmoBall" };
+                mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.10f));
+
+                var renderer = visual.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = mat;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
+            var collider = root.AddComponent<SphereCollider>();
+            collider.radius = radius;
+            collider.isTrigger = true;
+
+            root.AddComponent<TransformHandle>()
+                .Configure(TransformHandle.Kind.Free, Vector3.up, new Color(1f, 1f, 1f, 0.1f));
         }
 
         private void BuildRotationArc()
