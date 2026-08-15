@@ -1,19 +1,27 @@
 Shader "VexDesigner/PartOutline"
 {
-    // Draws a coloured border round a part by rendering the mesh a second
-    // time, inside out and slightly fattened, so only the rim shows past the
-    // real surface.
+    // Traces a part's silhouette: a coloured border wherever the part meets
+    // the background, and nowhere else.
+    //
+    // The naive inverted-hull outline does not do this. It fattens the mesh
+    // and draws the back faces, which puts a border around every opening as
+    // well as around the part - so a C-channel came out ringed at all 174 of
+    // its holes, reading as a wireframe rather than as something outlined.
+    // The holes are silhouette edges too, and geometry alone cannot tell
+    // "edge against the sky" from "edge against more of this same part".
+    //
+    // The stencil buffer can. The part is stamped into stencil first, then the
+    // fattened hull is drawn only where that stamp is absent. A hole showing
+    // the workshop behind it gets a border; a hole showing the channel's own
+    // far wall does not, because the far wall stamped itself. Folds, seams and
+    // interior edges are all covered by the part's own stamp and stay clean.
     //
     // Chosen over an emissive glow because an outline says something a glow
     // cannot. A frozen part is *marked*, not lit: the mark has to be legible
     // against pale aluminium and dark shadow alike, has to leave the part's
-    // own colour readable, and must not be confused with the part simply
-    // catching the light. Emission failed all three - a bright aluminium part
-    // washed out and a dark one barely changed.
-    //
-    // Thickness is scaled by distance so the border stays the same width on
-    // screen. A fixed offset in world units disappears across the room and
-    // swallows the part when you lean in.
+    // own colour readable, and must not be confused with the part catching the
+    // light. Emission failed all three - a bright aluminium part washed out
+    // and a dark one barely changed.
     Properties
     {
         _BaseColor ("Colour", Color) = (0.2, 0.55, 1, 1)
@@ -29,15 +37,68 @@ Shader "VexDesigner/PartOutline"
             "Queue" = "Geometry+1"
         }
 
+        // A single bit, so nothing else that uses the stencil buffer is
+        // disturbed and neither is this.
+        Pass
+        {
+            Name "OutlineMask"
+
+            // Stamps where the part is on screen. No colour, no depth - it
+            // exists only to say "this pixel is part".
+            ColorMask 0
+            ZWrite Off
+            ZTest LEqual
+            Cull Back
+
+            Stencil
+            {
+                Ref 32
+                WriteMask 32
+                Comp Always
+                Pass Replace
+            }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct Attributes { float4 positionOS : POSITION; };
+            struct Varyings   { float4 positionCS : SV_POSITION; };
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                return output;
+            }
+
+            half4 frag(Varyings input) : SV_Target
+            {
+                return 0;
+            }
+            ENDHLSL
+        }
+
         Pass
         {
             Name "Outline"
 
             // Front faces culled, so what remains is the back of the fattened
-            // hull - visible only where it pokes out past the real part.
+            // hull - which pokes out past the part exactly at its silhouette.
             Cull Front
-            ZWrite On
+            ZWrite Off
             ZTest LEqual
+
+            // Only outside the stamp. This is what confines the border to the
+            // outside edge instead of ringing every hole.
+            Stencil
+            {
+                Ref 32
+                ReadMask 32
+                Comp NotEqual
+            }
 
             HLSLPROGRAM
             #pragma vertex vert
@@ -52,8 +113,8 @@ Shader "VexDesigner/PartOutline"
 
                 // Smoothed normals, baked at import. See BakeOutlineNormals.
                 // Extruding along the *rendering* normals tears the border open
-                // at every hard edge, and the gaps read as lines drawn across
-                // the middle of the part rather than around it.
+                // at every hard edge, because those are deliberately split so
+                // machined corners stay crisp.
                 float3 smoothOS   : TEXCOORD3;
             };
 
@@ -70,9 +131,7 @@ Shader "VexDesigner/PartOutline"
             Varyings vert(Attributes input)
             {
                 Varyings output;
-
-                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                output.positionCS = TransformWorldToHClip(positionWS);
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
 
                 // Fall back to the rendering normal on a mesh that has not been
                 // baked, so an unprocessed part still gets a border - a seamed

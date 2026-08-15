@@ -87,6 +87,10 @@ namespace VexDesigner.Parts
                 }
 
                 var body = part.GetComponent<Rigidbody>();
+
+                // A follower has no body of its own while the assembly is being
+                // carried - it is part of the leader's. Freezing it is the
+                // leader's business.
                 if (body != null)
                 {
                     body.isKinematic = frozen;
@@ -216,29 +220,38 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Locks the rest of the group onto one member, so moving that member
-        /// moves the assembly.
+        /// Makes the whole assembly one rigid body, held together by the
+        /// member in hand.
         ///
-        /// Needed because carrying is driven through a single Rigidbody. Before
-        /// this, a bolted-together robot picked up by one of its C-channels
-        /// left the rest of itself behind - the parts were in a group, but
-        /// nothing ever asked the group to move.
+        /// The followers are *parented* to the leader and have their own
+        /// Rigidbody removed, which in Unity makes their colliders part of the
+        /// leader's body. That is not an approximation of being joined - it is
+        /// one body with several shapes, so the parts cannot drift apart at any
+        /// speed, and the assembly collides with the bench as the single object
+        /// it is.
         ///
-        /// The followers are pinned rather than simulated. Two dynamic bodies
-        /// held rigidly together fight each other through the solver, and the
-        /// result shakes itself apart; the leader collides on the assembly's
-        /// behalf and the rest simply keep their places relative to it.
+        /// The first attempt copied the leader's pose onto the followers every
+        /// physics step. It looked right standing still and came apart the
+        /// moment anything moved quickly, which is what a copied pose always
+        /// does: the leader is interpolated between physics steps and the
+        /// copies are not, so they lag by up to a frame - and a frame at
+        /// carrying speed is a visible gap.
+        ///
+        /// Joints were the other option and are worse here. A joint is a spring
+        /// with a very high stiffness, so it stretches under load and rings
+        /// afterwards; two dozen of them in a robot is a machine that wobbles.
         /// </summary>
         public void BeginFollow(PartInstance leader)
         {
-            follow.Clear();
+            EndFollow();
 
-            if (leader == null)
+            if (leader == null || members.Count < 2)
             {
                 return;
             }
 
             followLeader = leader;
+            CarriedLeader = leader;
             Transform lead = leader.transform;
 
             foreach (PartInstance part in members)
@@ -249,32 +262,37 @@ namespace VexDesigner.Parts
                 }
 
                 var body = part.GetComponent<Rigidbody>();
-                if (body != null)
-                {
-                    body.isKinematic = true;
-                    body.linearVelocity = Vector3.zero;
-                    body.angularVelocity = Vector3.zero;
-                }
 
                 follow.Add(new Follower
                 {
                     part = part,
-                    localPosition = lead.InverseTransformPoint(part.transform.position),
-                    localRotation = Quaternion.Inverse(lead.rotation) * part.transform.rotation,
+                    parent = part.transform.parent,
+                    definition = part.Definition,
+                    wasKinematic = body != null && body.isKinematic,
                 });
+
+                // A child with its own Rigidbody stays a separate body no
+                // matter how it is parented, so it has to go for the colliders
+                // to be adopted.
+                if (body != null)
+                {
+                    Object.Destroy(body);
+                }
+
+                part.transform.SetParent(lead, true);
             }
         }
 
-        /// <summary>Puts the followers back where the leader says they go.</summary>
+        /// <summary>
+        /// Kept for callers that used to drive the followers by hand. The
+        /// parenting does the work now, every frame, for free.
+        /// </summary>
         public void UpdateFollow()
         {
-            if (followLeader == null)
-            {
-                return;
-            }
+        }
 
-            Transform lead = followLeader.transform;
-
+        public void EndFollow()
+        {
             foreach (Follower follower in follow)
             {
                 if (follower.part == null)
@@ -282,48 +300,64 @@ namespace VexDesigner.Parts
                     continue;
                 }
 
-                Vector3 position = lead.TransformPoint(follower.localPosition);
-                Quaternion rotation = lead.rotation * follower.localRotation;
+                follower.part.transform.SetParent(follower.parent, true);
 
-                follower.part.transform.SetPositionAndRotation(position, rotation);
+                // Physics back, from the part's own specification rather than
+                // from whatever the destroyed body happened to hold.
+                if (follower.definition != null &&
+                    follower.part.GetComponent<Rigidbody>() == null)
+                {
+                    PartFactory.AddPhysics(follower.part.gameObject, follower.definition);
+                }
 
                 var body = follower.part.GetComponent<Rigidbody>();
-                if (body != null)
-                {
-                    body.position = position;
-                    body.rotation = rotation;
-                }
-            }
-        }
-
-        public void EndFollow()
-        {
-            foreach (Follower follower in follow)
-            {
-                var body = follower.part == null
-                    ? null
-                    : follower.part.GetComponent<Rigidbody>();
 
                 if (body != null)
                 {
-                    body.isKinematic = IsFrozen;
-                    body.useGravity = !IsFrozen;
+                    body.isKinematic = IsFrozen || follower.wasKinematic;
+                    body.useGravity = !body.isKinematic;
+                    body.linearVelocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
                 }
             }
 
             follow.Clear();
+
+            if (CarriedLeader == followLeader)
+            {
+                CarriedLeader = null;
+            }
+
             followLeader = null;
         }
+
+        /// <summary>
+        /// The part currently holding an assembly together in the user's hand,
+        /// if any.
+        ///
+        /// Static because the weld has to survive the assembly being worked
+        /// out again. Groups are thrown away and rebuilt whenever a fastener
+        /// changes, and the records of what was welded to what live on the
+        /// group - so placing a nut while holding the robot discarded them,
+        /// leaving those parts parented to the leader with no bodies of their
+        /// own and no way back. They looked exactly as though the new part had
+        /// stolen them.
+        /// </summary>
+        public static PartInstance CarriedLeader { get; private set; }
 
         private struct Follower
         {
             public PartInstance part;
-            public Vector3 localPosition;
-            public Quaternion localRotation;
+            public Transform parent;
+            public PartDefinition definition;
+            public bool wasKinematic;
         }
 
         private readonly List<Follower> follow = new List<Follower>();
         private PartInstance followLeader;
+
+        /// <summary>True while the assembly is welded together in hand.</summary>
+        public bool IsCarried => followLeader != null;
 
         /// <summary>Centre of the group's rendered bounds.</summary>
         public Vector3 GetCentre()

@@ -46,6 +46,13 @@ namespace VexDesigner.Parts
         {
             PartHoles heldHoles = held == null ? null : held.GetComponent<PartHoles>();
 
+            // An assembly in the user's hand is physically welded together, and
+            // the record of that lives on the group about to be discarded. It
+            // is taken apart first and put back afterwards, so the weld follows
+            // the parts into whatever assembly they now belong to.
+            PartInstance carried = PartGroup.CarriedLeader;
+            carried?.Group?.EndFollow();
+
             IReadOnlyList<PartInstance> parts = PartInstance.All;
             IReadOnlyList<PlacedScrew> screws = PlacedScrew.All;
 
@@ -89,6 +96,8 @@ namespace VexDesigner.Parts
             // Parts bolted face to face overlap by a fraction of a millimetre,
             // and a whole robot of those pushing apart at once is an assembly
             // that shakes itself to pieces.
+            carried?.Group?.BeginFollow(carried);
+
             var seen = new HashSet<PartGroup>();
 
             for (int i = 0; i < parts.Count; i++)

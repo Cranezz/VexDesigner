@@ -45,6 +45,7 @@ namespace VexDesigner.EditorTools
             Case(MatedPartsSitSquare);
             Case(FrozenSurvivesUngrouping);
             Case(TightNutStillSeats);
+            Case(ChainOfThreeStaysOneAssembly);
 
             if (failures == 0)
             {
@@ -631,6 +632,78 @@ namespace VexDesigner.EditorTools
             Dump("tight stack with nut", screw);
 
             True("a tight nut still registers as gripping", screw.GripDepth() >= 0f);
+        }
+
+        /// <summary>
+        /// Adding a part to a robot must join it, not move the joint.
+        ///
+        /// Three channels in a stack: the first screw holds the top two, the
+        /// second holds the bottom two. The middle channel is in both, so all
+        /// three have to end up in one assembly - a new part must not take its
+        /// neighbour out of the group it was already in.
+        /// </summary>
+        private static void ChainOfThreeStaysOneAssembly(List<GameObject> rubbish)
+        {
+            PartDefinition channelDef = Load("CCHL-2");
+            PartDefinition screwDef = Load("276-4996");
+            PartDefinition nutDef = Load("275-1028");
+
+            if (channelDef == null || screwDef == null || nutDef == null)
+            {
+                return;
+            }
+
+            GameObject top = Spawn(channelDef, Vector3.zero, Quaternion.identity, rubbish);
+            HoleHit first = top.GetComponent<PartHoles>().FaceAt(0, false);
+
+            float wall = 0.0625f * InchesToMetres;
+
+            GameObject middle = Spawn(
+                channelDef, -first.WorldNormal * wall, Quaternion.identity, rubbish);
+
+            // The first screw, through the top two only.
+            PlacedScrew screwA = DriveScrew(screwDef, first, rubbish);
+            if (screwA == null || !FitNut(screwA, nutDef, rubbish, out GameObject nutA))
+            {
+                return;
+            }
+
+            True("first two channels are joined",
+                top.GetComponent<PartInstance>().Group ==
+                middle.GetComponent<PartInstance>().Group);
+
+            // Now a third channel, screwed to the middle one through a
+            // different hole - the case the user hit.
+            GameObject bottom = Spawn(
+                channelDef, -first.WorldNormal * (wall * 2f), Quaternion.identity, rubbish);
+
+            HoleHit second = middle.GetComponent<PartHoles>().FaceAt(1, false);
+            PlacedScrew screwB = DriveScrew(screwDef, second, rubbish);
+
+            if (screwB == null || !FitNut(screwB, nutDef, rubbish, out GameObject nutB))
+            {
+                return;
+            }
+
+            PartGroup group = middle.GetComponent<PartInstance>().Group;
+
+            True("the top channel is still in the assembly",
+                top.GetComponent<PartInstance>().Group == group);
+            True("the bottom channel joined it",
+                bottom.GetComponent<PartInstance>().Group == group);
+            True("the first screw is still in it",
+                screwA.GetComponent<PartInstance>().Group == group);
+            True("the second screw is in it",
+                screwB.GetComponent<PartInstance>().Group == group);
+            True("both nuts are in it",
+                nutA.GetComponent<PartInstance>().Group == group &&
+                nutB.GetComponent<PartInstance>().Group == group);
+
+            Debug.Log("[FastenerTests] chain of three: " + group.Members.Count +
+                      " parts in one assembly");
+
+            // Seven: three channels, two screws, two nuts.
+            Near("nothing was left behind", group.Members.Count, 7f, 0.1f);
         }
 
         /// <summary>

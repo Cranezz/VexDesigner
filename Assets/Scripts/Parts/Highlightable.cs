@@ -145,6 +145,14 @@ namespace VexDesigner.Parts
 
         private void Update()
         {
+            // Frozen-ness is owned by the group, so it is read from there every
+            // frame rather than pushed in when it changes. Anything that
+            // rewrites a part's materials - the ghost, most often - drops the
+            // border, and a part that was ghosted and then let go came back
+            // unmarked despite still being pinned. A state that is *derived*
+            // cannot fall out of step with the thing it is derived from.
+            SyncPinned();
+
             if (Mathf.Approximately(current, target))
             {
                 return;
@@ -210,6 +218,34 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>Puts the frozen border up or takes it down.</summary>
+        /// <summary>
+        /// Matches the border to whether the part is actually frozen.
+        /// </summary>
+        private void SyncPinned()
+        {
+            if (instance == null)
+            {
+                instance = GetComponent<PartInstance>();
+            }
+
+            bool shouldBePinned = instance != null && instance.IsFrozen;
+
+            if (shouldBePinned != pinned)
+            {
+                pinned = shouldBePinned;
+                Apply();
+            }
+
+            // The flag can be right while the border is gone, so the border is
+            // checked in its own right rather than trusted to follow.
+            if (outline == null || outline.IsShowing != pinned)
+            {
+                ApplyOutline();
+            }
+        }
+
+        private PartInstance instance;
+
         private void ApplyOutline()
         {
             if (outline == null)

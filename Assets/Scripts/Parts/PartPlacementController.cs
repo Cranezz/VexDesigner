@@ -757,8 +757,6 @@ namespace VexDesigner.Parts
                 carriedBody.rotation = moving.rotation;
             }
 
-            carriedInstance?.Group?.UpdateFollow();
-
             UpdateRotationRing();
         }
 
@@ -1172,10 +1170,9 @@ namespace VexDesigner.Parts
 
             carriedInstance?.Group?.SetGrabbed(true);
 
-            // The rest of the assembly rides on this part. Without it a bolted
-            // robot picked up by one C-channel leaves the rest of itself on the
-            // bench - the parts knew they were a group, but nothing ever asked
-            // the group to move.
+            // The rest of the assembly is welded onto this part for the
+            // duration, so the whole thing moves as one object rather than as a
+            // group of parts that merely agree about where they are.
             carriedInstance?.Group?.BeginFollow(carriedInstance);
 
             // And none of it shoves the player around. Walking into what you
@@ -1302,14 +1299,26 @@ namespace VexDesigner.Parts
 
             Hole hole = definition.holeSet.holes[0];
 
+            // Whichever face is already pointing at the target is the one that
+            // seats against it. Always taking the front face meant a nut held
+            // the natural way up was turned over to put its far side down -
+            // the wrong side, and a needless somersault on the way.
+            Vector3 wanted = -hit.WorldNormal;
+
+            HoleFace seat =
+                Vector3.Dot(targetRotation * hole.front.localNormal, wanted) >=
+                Vector3.Dot(targetRotation * hole.back.localNormal, wanted)
+                    ? hole.front
+                    : hole.back;
+
             screwTarget = hit;
             nutTarget = default;
-            mateFace = hole.front;
+            mateFace = seat;
 
             BeginFastenerPreview();
 
             if (HoleMating.ComputePose(
-                    hole.front, targetRotation, hit, squareOnSnapDegrees, 0f,
+                    seat, targetRotation, hit, squareOnSnapDegrees, 0f,
                     carried.transform.lossyScale,
                     out Vector3 position, out Quaternion rotation, out _))
             {
@@ -1495,8 +1504,6 @@ namespace VexDesigner.Parts
                 carriedBody.position = position;
                 carriedBody.rotation = rotation;
             }
-
-            carriedInstance?.Group?.UpdateFollow();
         }
 
         /// <summary>
@@ -1626,8 +1633,6 @@ namespace VexDesigner.Parts
 
             DriveRotation();
             DrivePosition();
-
-            carriedInstance?.Group?.UpdateFollow();
         }
 
         /// <summary>
@@ -1847,10 +1852,11 @@ namespace VexDesigner.Parts
 
             T best = null;
             float bestDistance = float.MaxValue;
+            int bestRank = int.MaxValue;
 
             for (int i = 0; i < count; i++)
             {
-                if (hits[i].distance >= bestDistance)
+                if (hits[i].distance >= bestDistance && bestRank == 0)
                 {
                     continue;
                 }
@@ -1870,12 +1876,21 @@ namespace VexDesigner.Parts
                     continue;
                 }
 
-                if (!TrueDistance(hits[i], out float distance) || distance >= bestDistance)
+                bool metal = TrueDistance(hits[i], out float distance);
+
+                // Solid metal always beats a part the ray only passes near.
+                // Without that a nut inside a C-channel could never be
+                // clicked, because the channel's hull is an invisible wall
+                // across the opening and is always nearer.
+                int rank = metal ? 0 : 1;
+
+                if (rank > bestRank || (rank == bestRank && distance >= bestDistance))
                 {
                     continue;
                 }
 
                 best = candidate;
+                bestRank = rank;
                 bestDistance = distance;
                 nearestHit = hits[i];
             }
@@ -1897,6 +1912,24 @@ namespace VexDesigner.Parts
         /// Testing the actual triangles puts that right: the hull is ignored
         /// where there is no metal, so the nut is simply the nearest thing and
         /// the click reaches it.
+        /// </summary>
+        /// <summary>
+        /// How far away a part's actual metal is, and whether the ray met any.
+        ///
+        /// The two differ badly, because a part's collider is the convex hull
+        /// of its mesh. A C-channel's hull is a solid block filling the
+        /// channel, so anything inside the channel - a nut on the end of a
+        /// screw, most obviously - sits behind an invisible wall as far as the
+        /// physics engine is concerned, and every click meant for it lands on
+        /// the C-channel instead.
+        ///
+        /// Missing the metal entirely is not a reason to ignore the part,
+        /// though, and treating it as one broke hole aiming outright: pointing
+        /// *at* a hole means pointing at a gap in the metal, and on a
+        /// C-channel's web the ray goes cleanly through the hole and out of
+        /// the open side without touching anything. The part is still what the
+        /// user is pointing at. So a near miss still counts - it just loses to
+        /// anything the ray genuinely hits.
         /// </summary>
         private bool TrueDistance(RaycastHit hit, out float distance)
         {
@@ -1925,8 +1958,6 @@ namespace VexDesigner.Parts
 
             if (!tester.FirstCrossing(localOrigin, localDirection, aimDistance, out float local))
             {
-                // The hull was hit but the metal was not. Looking straight
-                // through the open side of a channel, for instance.
                 return false;
             }
 
