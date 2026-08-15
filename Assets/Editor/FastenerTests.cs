@@ -39,7 +39,7 @@ namespace VexDesigner.EditorTools
             Case(ScrewThroughOneWall);
             Case(NutOnTheEnd);
             Case(NutGoesOnTheEnd);
-            Case(NutFallsBackIntoAGap);
+            Case(ShortScrewStillTakesANut);
             Case(ScrewTooShortForANut);
             Case(GroupingFormsAndComesApart);
             Case(TwoScrewsHoldWhenOneComesOff);
@@ -251,10 +251,12 @@ namespace VexDesigner.EditorTools
 
             // Pointed into the gap, at the metal, and past the end. All three
             // have to give the same answer, because there is only one.
+            // Deliberately not into the gap: that is a request for a seat
+            // there, and is tested separately.
             var wheres = new[]
             {
-                (placed.Passes[0].Exit + placed.Passes[1].Entry) * 0.5f,
                 placed.Passes[0].Exit * 0.5f,
+                placed.Passes[1].Entry + ((placed.Passes[1].Exit - placed.Passes[1].Entry) * 0.5f),
                 (lastExit + placed.Length) * 0.5f,
             };
 
@@ -277,11 +279,11 @@ namespace VexDesigner.EditorTools
         }
 
         /// <summary>
-        /// A screw that only just reaches the far plate has no thread left on
-        /// the end, so the nut falls back to the last stretch that will take
-        /// it - clamping what the screw does reach rather than nothing at all.
+        /// A screw that only just reaches the far plate still takes a nut on
+        /// the end - any exposed thread will do - and can still take one in
+        /// the gap if that is where the user points.
         /// </summary>
-        private static void NutFallsBackIntoAGap(List<GameObject> rubbish)
+        private static void ShortScrewStillTakesANut(List<GameObject> rubbish)
         {
             PartDefinition channelDef = Load("CCHL-2");
             PartDefinition screwDef = Load("276-4997");   // 1-1/4 inch
@@ -315,7 +317,7 @@ namespace VexDesigner.EditorTools
                       " in past the far wall, nut is " +
                       nutDef.fastener.thicknessInches.ToString("0.0000") + " in.");
 
-            True("there is not room on the end",
+            True("there is not a full nut's room on the end",
                 spare < nutDef.fastener.thicknessInches);
 
             Ray aim = AimAt(placed, placed.Length * 0.99f);
@@ -325,8 +327,25 @@ namespace VexDesigner.EditorTools
 
             if (seating.IsValid)
             {
-                Near("it falls back into the gap", seating.Distance, placed.Passes[0].Exit);
-                True("and is reported as a gap fitting", seating.InGap);
+                // Exposed thread is exposed thread. The nut goes on the end
+                // and may hang past it, which is the builder's business.
+                Near("the nut still goes on the end", seating.Distance, lastExit);
+                False("and it is not a gap fitting", seating.InGap);
+            }
+
+            // Pointing into the gap between the walls still puts it there.
+            Ray inGap = AimAt(placed,
+                (placed.Passes[0].Exit + placed.Passes[1].Entry) * 0.5f);
+
+            NutSeating gapSeat = FastenerFitting.FindNutSeating(placed, nutDef, inGap);
+
+            True("pointing into the gap offers a seat", gapSeat.IsValid);
+
+            if (gapSeat.IsValid)
+            {
+                Near("clamped against the wall above the gap",
+                    gapSeat.Distance, placed.Passes[0].Exit);
+                True("and is reported as a gap fitting", gapSeat.InGap);
             }
         }
 

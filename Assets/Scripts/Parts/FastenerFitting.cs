@@ -77,11 +77,15 @@ namespace VexDesigner.Parts
         /// <summary>
         /// Where a nut goes on a screw, given where on it the user is pointing.
         ///
-        /// The end of the stack, tightened flush against the last piece of
-        /// metal - and on a bare screw, right up against the head. Where the
-        /// user is looking along the screw makes no difference, because
-        /// pointing at a screw means "put a nut on this screw" and that has
-        /// one answer.
+        /// By default the end of the stack, tightened flush against the last
+        /// piece of metal - and on a bare screw, right up against the head.
+        /// Pointing into a gap between two plates puts it there instead,
+        /// clamping what is above it and leaving the rest of the shank free.
+        ///
+        /// Any exposed thread will take a nut. Whether the nut then hangs past
+        /// the end of the screw is the builder's business: a quarter-inch
+        /// screw through two walls has a hundredth of an inch to spare on
+        /// paper and takes a nut perfectly well in the workshop.
         /// </summary>
         public static NutSeating FindNutSeating(
             PlacedScrew screw, PartDefinition nut, Ray aim)
@@ -126,43 +130,55 @@ namespace VexDesigner.Parts
             // held over a screw.
             ScrewLine.Gaps(screw.Passes, length, gaps);
 
-            // The end of the stack, flush against the last piece of metal.
-            // That is where a nut goes.
-            //
-            // An earlier version chose between every stretch of bare shank by
-            // which one the cursor was nearest, so the answer moved as the user
-            // looked around and the same screw took a nut in different places
-            // depending on where they happened to be pointing. Clever, and
-            // nobody asked for it. Pointing at a screw means "nut on this
-            // screw", and that has one answer.
-            float distance = LastExit(screw);
+            // Where along the shank the user is pointing.
+            float pointed = Mathf.Clamp(ClosestApproach(aim, seat, direction), 0f, length);
+
+            // Any exposed thread will take a nut. Whether the nut then hangs
+            // past the end of the screw is the builder's problem, not
+            // something to be refused - a quarter-inch screw through two walls
+            // has a hundredth of an inch to spare on paper and takes a nut
+            // perfectly well in practice, and being told it does not fit is
+            // both wrong and unhelpful.
+            const float MinimumThread = 0.0003f;
+
+            float distance = -1f;
             bool inGap = false;
 
-            if (distance + thickness > length + 1e-4f)
+            // The last gap is the run past the final plate: the ordinary
+            // end-of-screw position, and the default.
+            for (int i = gaps.Count - 1; i >= 0; i--)
             {
-                // No thread left past the metal. Fall back to the deepest
-                // stretch of bare shank that will take it - a screw that only
-                // reaches halfway can still clamp what it does reach, which is
-                // better than refusing to fasten anything at all.
-                distance = -1f;
-
-                for (int i = gaps.Count - 1; i >= 0; i--)
+                if (gaps[i].y - gaps[i].x >= MinimumThread)
                 {
-                    if (gaps[i].x + thickness <= length + 1e-4f)
-                    {
-                        distance = gaps[i].x;
-                        inGap = i < gaps.Count - 1;
-                        break;
-                    }
+                    distance = gaps[i].x;
+                    inGap = i < gaps.Count - 1;
+                    break;
+                }
+            }
+
+            if (distance < 0f)
+            {
+                // No bare shank anywhere: the screw is buried to its head.
+                return default;
+            }
+
+            // Pointing *into* a gap puts the nut there instead, which is how a
+            // nut is clamped between two plates with the rest of the shank
+            // left free. A real thing to do with a real screw, and worth
+            // keeping - it just is not the default.
+            for (int i = 0; i < gaps.Count - 1; i++)
+            {
+                Vector2 gap = gaps[i];
+
+                if (gap.y - gap.x < MinimumThread ||
+                    pointed < gap.x - 1e-4f || pointed > gap.y + 1e-4f)
+                {
+                    continue;
                 }
 
-                if (distance < 0f)
-                {
-                    // Nowhere on this screw will take it. Not an error - the
-                    // wrong nut or the wrong screw, and both are obvious from
-                    // looking at them.
-                    return default;
-                }
+                distance = gap.x;
+                inGap = true;
+                break;
             }
 
             seating.Distance = distance;
@@ -175,6 +191,32 @@ namespace VexDesigner.Parts
             seating.WorldNormal = -direction;
 
             return seating;
+        }
+
+        /// <summary>
+        /// Distance along a line to the point nearest a ray: the standard
+        /// closest approach of two skew lines.
+        /// </summary>
+        private static float ClosestApproach(Ray ray, Vector3 origin, Vector3 direction)
+        {
+            Vector3 w = origin - ray.origin;
+
+            float a = Vector3.Dot(direction, direction);
+            float b = Vector3.Dot(direction, ray.direction);
+            float c = Vector3.Dot(ray.direction, ray.direction);
+            float d = Vector3.Dot(direction, w);
+            float e = Vector3.Dot(ray.direction, w);
+
+            float denominator = (a * c) - (b * b);
+
+            // Looking straight down the screw. Every point on it is equally
+            // near, so there is nothing to choose between them.
+            if (Mathf.Abs(denominator) < 1e-9f)
+            {
+                return 0f;
+            }
+
+            return ((b * e) - (c * d)) / denominator;
         }
 
         private static float LastExit(PlacedScrew screw)

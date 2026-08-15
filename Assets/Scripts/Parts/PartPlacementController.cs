@@ -151,7 +151,6 @@ namespace VexDesigner.Parts
         private float rollBeforeRotating;
 
         private Vector3 ringZeroDirection;
-        private PartGhost ghost;
         private HoleRotationRing rotationRing;
 
         /// <summary>Pose at the moment of grabbing, so a cancel can undo it.</summary>
@@ -321,6 +320,30 @@ namespace VexDesigner.Parts
             {
                 UpdateIdle();
             }
+
+            SyncGhosting();
+        }
+
+        /// <summary>
+        /// Says which parts are see-through, every frame.
+        ///
+        /// The whole assembly or none of it. A bolted robot is one object, so
+        /// showing half of it as a proposal and half as solid metal says
+        /// something untrue about what is being placed - and leaves most of the
+        /// join the user is judging hidden behind the parts that stayed opaque.
+        ///
+        /// Stated rather than switched on and off. Ghosting used to be applied
+        /// to the members of the assembly being picked up and lifted from the
+        /// members of the assembly being put down, and those are not the same
+        /// set - bolting something on rebuilds the groups in between - so
+        /// whatever had left the assembly stayed transparent for good.
+        /// </summary>
+        private void SyncGhosting()
+        {
+            bool placing = carryingByHole || fastenerPreview;
+
+            PartGhost.ApplyExactly(
+                placing && carriedInstance != null ? carriedInstance.Group?.Members : null);
         }
 
         // ------------------------------------------------------------------
@@ -563,39 +586,6 @@ namespace VexDesigner.Parts
             }
 
             SuspendColliders(go);
-            SetAssemblyGhosted(true);
-        }
-
-        /// <summary>
-        /// Turns the whole assembly to glass, not just the part in hand.
-        ///
-        /// A bolted robot held by one of its channels is a single object, and
-        /// ghosting one part of it would say otherwise - as well as leaving
-        /// most of the join the user is trying to judge still opaque.
-        /// </summary>
-        private void SetAssemblyGhosted(bool ghosted)
-        {
-            PartGroup group = carriedInstance?.Group;
-
-            if (group == null)
-            {
-                return;
-            }
-
-            foreach (PartInstance part in group.Members)
-            {
-                if (part == null)
-                {
-                    continue;
-                }
-
-                var partGhost = part.GetComponent<PartGhost>()
-                    ?? part.gameObject.AddComponent<PartGhost>();
-
-                partGhost.SetGhosted(ghosted);
-            }
-
-            ghost = ghosted ? carried.GetComponent<PartGhost>() : null;
         }
 
         private void UpdateHoleCarry()
@@ -1027,9 +1017,6 @@ namespace VexDesigner.Parts
                 placed.transform.SetPositionAndRotation(
                     holeCarryStartPosition, holeCarryStartRotation);
             }
-
-            SetAssemblyGhosted(false);
-            ghost = null;
 
             StopHoleRotation();
 
@@ -1564,9 +1551,6 @@ namespace VexDesigner.Parts
             }
 
             SuspendColliders(carried);
-
-            ghost = carried.GetComponent<PartGhost>() ?? carried.AddComponent<PartGhost>();
-            ghost.SetGhosted(true);
         }
 
         private bool EndFastenerPreview()
@@ -1582,9 +1566,6 @@ namespace VexDesigner.Parts
             mating = false;
 
             fastenerMarker?.Hide();
-
-            ghost?.SetGhosted(false);
-            ghost = null;
 
             RestoreColliders();
 
@@ -1624,9 +1605,6 @@ namespace VexDesigner.Parts
             PlacedScrew screw = nutTarget.Screw;
             NutSeating seating = nutTarget;
             bool wasMating = mating;
-
-            ghost?.SetGhosted(false);
-            ghost = null;
 
             fastenerMarker?.Hide();
             RestoreColliders();

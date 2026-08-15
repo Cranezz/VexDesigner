@@ -36,17 +36,78 @@ namespace VexDesigner.Parts
             new System.Collections.Generic.List<PartGhost>();
 
         /// <summary>Makes every part in the workshop solid again.</summary>
-        public static void RestoreAll()
+        public static void RestoreAll() => ApplyExactly(null);
+
+        /// <summary>
+        /// Makes exactly these parts see-through, and everything else solid.
+        ///
+        /// Stated rather than adjusted, and re-stated every frame. Ghosting was
+        /// previously switched on for the members of the assembly being picked
+        /// up and off for the members of the assembly being put down - and
+        /// those are not the same set, because bolting something on rebuilds
+        /// the groups in between. Whatever had left the assembly stayed
+        /// transparent for good.
+        ///
+        /// A group is meant to behave as one part. Deriving the state from
+        /// which group is in hand is what actually makes that true: there is
+        /// nothing to keep in step, because there is only one fact and every
+        /// part reads it.
+        /// </summary>
+        public static void ApplyExactly(
+            System.Collections.Generic.IReadOnlyList<PartInstance> parts)
         {
             for (int i = Ghosted.Count - 1; i >= 0; i--)
             {
-                if (Ghosted[i] != null)
+                PartGhost ghost = Ghosted[i];
+
+                if (ghost == null)
                 {
-                    Ghosted[i].SetGhosted(false);
+                    Ghosted.RemoveAt(i);
+                    continue;
+                }
+
+                if (!Contains(parts, ghost))
+                {
+                    ghost.SetGhosted(false);
                 }
             }
 
-            Ghosted.Clear();
+            if (parts == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i] == null)
+                {
+                    continue;
+                }
+
+                var ghost = parts[i].GetComponent<PartGhost>()
+                    ?? parts[i].gameObject.AddComponent<PartGhost>();
+
+                ghost.SetGhosted(true);
+            }
+        }
+
+        private static bool Contains(
+            System.Collections.Generic.IReadOnlyList<PartInstance> parts, PartGhost ghost)
+        {
+            if (parts == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i] != null && parts[i].gameObject == ghost.gameObject)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public bool IsGhosted { get; private set; }
