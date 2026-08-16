@@ -196,6 +196,7 @@ namespace VexDesigner.Parts
             if (interactionLock != null) { interactionLock.CameraOrbitLocked = true; }
 
             pointer.ShowPointer(true);
+            saw.SetHeadVisible(false);
 
             if (saw.HasPart)
             {
@@ -217,6 +218,7 @@ namespace VexDesigner.Parts
                 SawPreview.Restore(saw.Docked);
             }
 
+            saw.SetHeadVisible(true);
             handles?.Release();
 
             saw = null;
@@ -318,8 +320,11 @@ namespace VexDesigner.Parts
 
             // Measured from the machine's own forward, so the view starts
             // square to the fence however the saw is stood in the room.
+            // Out in front of the machine, which is the side it is used
+            // from. Swinging out along the saw's own forward put the camera
+            // behind the fence, looking at the back of the head.
             Quaternion swing = Quaternion.AngleAxis(yaw, Vector3.up) * saw.transform.rotation;
-            Vector3 back = swing * Vector3.forward;
+            Vector3 back = swing * Vector3.back;
 
             Vector3 direction =
                 (Vector3.up * Mathf.Sin(pitch * Mathf.Deg2Rad)) +

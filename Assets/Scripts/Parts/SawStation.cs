@@ -40,6 +40,10 @@ namespace VexDesigner.Parts
         [Header("Cosmetic")]
         [SerializeField] private Transform bladeVisual;
 
+        [Tooltip("Everything that can come between the camera and the stock: " +
+                 "the column, arm, motor and blade.")]
+        [SerializeField] private Transform head;
+
         // --- Settings, which are the cut -----------------------------------
 
         /// <summary>How the stock is turned on the bed, in degrees per axis.</summary>
@@ -140,6 +144,69 @@ namespace VexDesigner.Parts
 
             Reseat();
             return true;
+        }
+
+        /// <summary>
+        /// Fades the head so the stock under it can be seen.
+        ///
+        /// A saw blade has to reach the metal it cuts, which means it is always
+        /// directly over the most important thing on the bed. Raising it out of
+        /// the way would be a lie about where the cut falls, so instead it goes
+        /// to glass while the cut is being set up and comes back solid on the
+        /// way out.
+        /// </summary>
+        public void SetHeadVisible(bool solid)
+        {
+            if (head == null)
+            {
+                return;
+            }
+
+            foreach (Renderer renderer in head.GetComponentsInChildren<Renderer>())
+            {
+                if (!headOriginals.ContainsKey(renderer))
+                {
+                    headOriginals[renderer] = renderer.sharedMaterial;
+                }
+
+                renderer.sharedMaterial = solid
+                    ? headOriginals[renderer]
+                    : GhostMaterial();
+            }
+        }
+
+        private readonly Dictionary<Renderer, Material> headOriginals =
+            new Dictionary<Renderer, Material>();
+
+        private static Material ghost;
+
+        private static Material GhostMaterial()
+        {
+            if (ghost != null)
+            {
+                return ghost;
+            }
+
+            ghost = new Material(Shader.Find("Universal Render Pipeline/Lit"))
+            {
+                name = "SawHeadGhost",
+            };
+
+            // URP wants the blend mode, the keyword and the queue all set
+            // together; an alpha below one on an opaque material does nothing.
+            ghost.SetFloat("_Surface", 1f);
+            ghost.SetFloat("_Blend", 0f);
+            ghost.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            ghost.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            ghost.SetFloat("_ZWrite", 0f);
+            ghost.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            ghost.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+
+            ghost.SetColor("_BaseColor", new Color(0.55f, 0.62f, 0.75f, 0.22f));
+            ghost.SetFloat("_Metallic", 0.2f);
+            ghost.SetFloat("_Smoothness", 0.7f);
+
+            return ghost;
         }
 
         /// <summary>Lets the part go, leaving it where it sits.</summary>

@@ -153,17 +153,20 @@ namespace VexDesigner.UI
 
             if (stockLabel != null)
             {
-                stockLabel.text =
-                    $"<b>{saw.StockLengthInches:0.000} in</b> of stock   →   " +
-                    $"keeping <b>{saw.KeptLengthInches:0.000} in</b>";
+                stockLabel.text = saw.HasPart
+                    ? $"<b>{saw.StockLengthInches:0.000} in</b> of stock  →  " +
+                      $"keeping <b>{saw.KeptLengthInches:0.000} in</b>"
+                    : "<color=#889>Nothing on the bed. Drop a part on the saw.</color>";
             }
 
             if (hintLabel != null)
             {
                 hintLabel.text =
-                    "Drag the stock, the ball, or the blade\n" +
-                    "<b>Shift</b> 1/8 in · 15°    <b>Ctrl</b> 1/16 in · 1°\n" +
-                    "Right-drag orbits · <b>Enter</b> cuts · <b>Esc</b> leaves";
+                    "Drag the <b>stock</b> to slide it, the <b>ball</b> to turn it,\n" +
+                    "the <b>blade</b> to swing it.\n" +
+                    "<b>Shift</b> 1/8 in or 15°     <b>Ctrl</b> 1/16 in or 1°\n" +
+                    "Right-drag orbits · Shift+right-drag pans · Scroll zooms\n" +
+                    "<b>Enter</b> cuts · <b>Esc</b> leaves";
             }
 
             if (cutButton != null)

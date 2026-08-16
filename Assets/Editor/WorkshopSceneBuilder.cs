@@ -782,24 +782,24 @@ namespace VexDesigner.EditorTools
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(22f, -22f);
-            rect.sizeDelta = new Vector2(430f, 320f);
+            rect.sizeDelta = new Vector2(470f, 420f);
 
             panel.GetComponent<Image>().color = new Color(0.06f, 0.07f, 0.09f, 0.86f);
 
             var layout = panel.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(16, 16, 14, 14);
-            layout.spacing = 8f;
+            layout.spacing = 10f;
             layout.childControlHeight = false;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
             layout.childForceExpandWidth = true;
 
             TextMeshProUGUI stock = PanelLine(panel.transform, 17f,
-                new Color(0.85f, 0.88f, 0.92f), 26f);
+                new Color(0.85f, 0.88f, 0.92f), 46f);
 
             // Three angles across one row, matching the three coloured rings
             // on the ball out on the machine.
-            GameObject turnRow = PanelRow(panel.transform, 40f);
+            GameObject turnRow = PanelRow(panel.transform, 52f);
 
             TMP_InputField angleX = PanelField(turnRow.transform, "X",
                 new Color(0.95f, 0.3f, 0.3f));
@@ -812,7 +812,7 @@ namespace VexDesigner.EditorTools
 
             // The two cut distances and the blade, each coloured to match the
             // line it draws on the metal.
-            GameObject cutRow = PanelRow(panel.transform, 40f);
+            GameObject cutRow = PanelRow(panel.transform, 52f);
 
             TMP_InputField near = PanelField(cutRow.transform, "Dist 1",
                 new Color(0.25f, 0.85f, 1f));
@@ -849,8 +849,8 @@ namespace VexDesigner.EditorTools
             var button = buttonGo.AddComponent<Button>();
             button.targetGraphic = buttonGo.GetComponent<Image>();
 
-            TextMeshProUGUI hint = PanelLine(panel.transform, 13f,
-                new Color(0.58f, 0.63f, 0.70f), 62f);
+            TextMeshProUGUI hint = PanelLine(panel.transform, 14f,
+                new Color(0.62f, 0.67f, 0.74f), 96f);
 
             hint.enableWordWrapping = true;
 
