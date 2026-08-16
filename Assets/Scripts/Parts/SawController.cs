@@ -31,24 +31,12 @@ namespace VexDesigner.Parts
                  "enough that the machine is always in sight.")]
         [SerializeField] private float panLimit = 0.6f;
 
-        [Header("Knob feel")]
-        [Tooltip("Snap for part rotation with no modifier, in degrees.")]
-        [SerializeField] private float rotationSnap = 90f;
+        [Header("Steps are set on SawHandles, next to the things they move.")]
 
-        [Tooltip("Snap for part rotation while the snap modifier is held.")]
-        [SerializeField] private float rotationFineSnap = 15f;
 
-        [Tooltip("Snap for the blade with no modifier, in degrees.")]
-        [SerializeField] private float bladeSnap = 15f;
 
-        [Tooltip("Snap for the blade while the snap modifier is held.")]
-        [SerializeField] private float bladeFineSnap = 5f;
 
-        [Tooltip("Feed step with no modifier, in inches.")]
-        [SerializeField] private float feedSnap = 0.25f;
 
-        [Tooltip("Feed step while the snap modifier is held, in inches.")]
-        [SerializeField] private float feedFineSnap = 0.125f;
 
         private IPointerInput pointer;
         private IActionInput actions;
@@ -70,11 +58,6 @@ namespace VexDesigner.Parts
 
         /// <summary>Degrees around the machine, measured from its own forward.</summary>
         private float yaw;
-
-        private SawKnob grabbed;
-        private float grabbedReference;
-        private float grabbedStart;
-        private float turnedTotal;
 
         private Transform cameraParent;
         private Vector3 cameraLocalPosition;
@@ -182,8 +165,13 @@ namespace VexDesigner.Parts
             }
 
             cameraOffset = Vector3.zero;
-            distance = 0.9f;
-            pitch = 89f;
+
+            // The view the machine is meant to be read from: above and in
+            // front, looking down the bed at an angle. Straight down flattens
+            // the stock to a line and hides which way up it is, which is half
+            // of what the setup is about.
+            distance = 1.15f;
+            pitch = 38f;
             yaw = 0f;
 
             // Taken off the player's head for the duration.
@@ -229,8 +217,10 @@ namespace VexDesigner.Parts
                 SawPreview.Restore(saw.Docked);
             }
 
+            handles?.Release();
+
             saw = null;
-            grabbed = null;
+            handles = null;
 
             pointer.ShowPointer(false);
 
@@ -260,13 +250,13 @@ namespace VexDesigner.Parts
                 return;
             }
 
-            if (actions != null && actions.ConfirmPressed && saw.Cut())
+            if (actions != null && actions.ConfirmPressed)
             {
-                MessageBanner.Info("Cut");
+                TakeCut();
             }
 
             UpdateCamera();
-            UpdateKnob();
+            UpdateHandles();
 
             SawPreview.Refresh(saw);
         }
@@ -341,92 +331,91 @@ namespace VexDesigner.Parts
         }
 
         /// <summary>
-        /// Turning a knob, or sliding the stock.
+        /// Dragging the stock, the ball, or the blade.
         ///
-        /// The same absolute mechanic the hole dial and the gizmo rings use:
-        /// the value follows where the pointer is, not how far it has moved.
+        /// Everything is grabbed where it is, so there is one gesture for the
+        /// whole machine: press on a thing, move it, let go. Which thing was
+        /// grabbed decides what the movement means.
         /// </summary>
-        private void UpdateKnob()
+        private void UpdateHandles()
         {
-            if (!pointer.PrimaryHeld)
+            if (handles == null)
             {
-                grabbed = null;
-                return;
-            }
+                handles = saw.GetComponentInChildren<SawHandles>();
 
-            if (grabbed == null)
-            {
-                grabbed = KnobUnderPointer();
-
-                if (grabbed == null)
+                if (handles == null)
                 {
                     return;
                 }
-
-                grabbedReference = grabbed.ReadAngle(pointer.PointerRay);
-                grabbedStart = grabbed.Value(saw);
-                turnedTotal = 0f;
-                return;
             }
 
-            float now = grabbed.ReadAngle(pointer.PointerRay);
+            Ray ray = pointer.PointerRay;
 
-            // Unwrapped, so a knob can be spun round and round.
-            //
-            // Reading the turn as a plain difference caps it at half a turn,
-            // because an angle only has 360 degrees to report - so the feed
-            // knob, which is four inches per turn, could be moved two inches
-            // and then snapped back to nothing as the reading wrapped past the
-            // far side. Accumulating the difference frame by frame has no such
-            // limit.
-            turnedTotal += Mathf.DeltaAngle(grabbedReference + turnedTotal, now);
-
-            grabbed.Apply(saw, grabbedStart, turnedTotal, Coarse(grabbed), Fine(grabbed), Free);
-        }
-
-        private SawKnob KnobUnderPointer()
-        {
-            if (!Physics.Raycast(pointer.PointerRay, out RaycastHit hit, 8f))
+            if (!pointer.PrimaryHeld)
             {
-                return null;
+                handles.Release();
+                handles.Probe(ray);
             }
-
-            return hit.collider.GetComponentInParent<SawKnob>();
+            else if (handles.Held == SawHandles.Grip.None)
+            {
+                // Not started over the panel: a click on a field is for the
+                // field, not for the machine behind it.
+                if (!pointer.IsOverInterface)
+                {
+                    handles.Begin(ray);
+                }
+            }
+            else
+            {
+                handles.Drag(ray, Snapping, Free);
+            }
         }
+
+        /// <summary>
+        /// Which dimension the machine is currently pointing at, so the panel
+        /// can light the matching field.
+        /// </summary>
+        public SawAnnotations.Item HoveredItem
+        {
+            get
+            {
+                if (handles == null)
+                {
+                    return SawAnnotations.Item.None;
+                }
+
+                SawHandles.Grip grip = handles.Held != SawHandles.Grip.None
+                    ? handles.Held
+                    : handles.Hovered;
+
+                return grip switch
+                {
+                    SawHandles.Grip.Slide => SawAnnotations.Item.NearFace,
+                    SawHandles.Grip.Blade => SawAnnotations.Item.BladeAngle,
+                    SawHandles.Grip.RotateX => SawAnnotations.Item.RotateX,
+                    SawHandles.Grip.RotateY => SawAnnotations.Item.RotateY,
+                    SawHandles.Grip.RotateZ => SawAnnotations.Item.RotateZ,
+                    _ => SawAnnotations.Item.None,
+                };
+            }
+        }
+
+        /// <summary>Takes the cut, for the button and the key alike.</summary>
+        public void TakeCut()
+        {
+            if (saw != null && saw.Cut())
+            {
+                MessageBanner.Info("Cut");
+            }
+        }
+
+        private SawHandles handles;
 
         private bool Free => actions != null && actions.PrecisionHeld;
 
         private bool Snapping => actions != null && actions.SnapHeld;
 
-        /// <summary>
-        /// The step with no modifier held: a quarter inch of feed, a quarter
-        /// turn of the stock, fifteen degrees of blade.
-        /// </summary>
-        private float Coarse(SawKnob knob)
-        {
-            return knob.Kind switch
-            {
-                SawKnob.Control.Feed => feedSnap,
-                SawKnob.Control.Blade => bladeSnap,
-                _ => rotationSnap,
-            };
-        }
 
-        /// <summary>The step with the snap modifier held.</summary>
-        private float Fine(SawKnob knob)
-        {
-            return knob.Kind switch
-            {
-                SawKnob.Control.Feed => feedFineSnap,
-                SawKnob.Control.Blade => bladeFineSnap,
-                _ => rotationFineSnap,
-            };
-        }
 
-        /// <summary>Which step applies right now.</summary>
-        public float Step(SawKnob knob)
-        {
-            return Free ? 0f : (Snapping ? Fine(knob) : Coarse(knob));
-        }
     }
 }

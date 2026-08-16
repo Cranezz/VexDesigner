@@ -39,6 +39,7 @@ namespace VexDesigner.EditorTools
             UndoRestoresTheWholePart();
             SawSetsUpAndCuts();
             TypedMeasurements();
+            TwoDistancesAgree();
 
             if (failures == 0)
             {
@@ -426,28 +427,125 @@ namespace VexDesigner.EditorTools
         private static void TypedMeasurements()
         {
             Near("a decimal reads back",
-                VexDesigner.UI.SawInterface.ParseInches("7.317", 0f), 7.317f, 1e-4f);
+                VexDesigner.UI.SawPanel.ParseInches("7.317", 0f), 7.317f, 1e-4f);
 
             Near("a whole number and a fraction adds up",
-                VexDesigner.UI.SawInterface.ParseInches("7 5/16", 0f), 7.3125f, 1e-4f);
+                VexDesigner.UI.SawPanel.ParseInches("7 5/16", 0f), 7.3125f, 1e-4f);
 
             Near("a bare fraction works",
-                VexDesigner.UI.SawInterface.ParseInches("3/8", 0f), 0.375f, 1e-4f);
+                VexDesigner.UI.SawPanel.ParseInches("3/8", 0f), 0.375f, 1e-4f);
 
             Near("inch marks are ignored",
-                VexDesigner.UI.SawInterface.ParseInches("2.5\"", 0f), 2.5f, 1e-4f);
+                VexDesigner.UI.SawPanel.ParseInches("2.5\"", 0f), 2.5f, 1e-4f);
 
             Near("nonsense keeps what was there",
-                VexDesigner.UI.SawInterface.ParseInches("banana", 4.25f), 4.25f, 1e-4f);
+                VexDesigner.UI.SawPanel.ParseInches("banana", 4.25f), 4.25f, 1e-4f);
 
             Near("a negative angle folds round",
-                VexDesigner.UI.SawInterface.ParseDegrees("-45", 0f), 315f, 1e-3f);
+                VexDesigner.UI.SawPanel.ParseDegrees("-45", 0f), 315f, 1e-3f);
 
             Near("more than a full turn folds too",
-                VexDesigner.UI.SawInterface.ParseDegrees("450", 0f), 90f, 1e-3f);
+                VexDesigner.UI.SawPanel.ParseDegrees("450", 0f), 90f, 1e-3f);
 
             Near("and a plain angle is itself",
-                VexDesigner.UI.SawInterface.ParseDegrees("37.5", 0f), 37.5f, 1e-3f);
+                VexDesigner.UI.SawPanel.ParseDegrees("37.5", 0f), 37.5f, 1e-3f);
+
+            // The blade keeps its sign, since the sign is which way it leans.
+            Near("a blade angle stays negative",
+                VexDesigner.UI.SawPanel.ParseSignedDegrees("-45", 0f), -45f, 1e-3f);
+
+            Near("and is held inside what the head can swing",
+                VexDesigner.UI.SawPanel.ParseSignedDegrees("-500", 0f),
+                -SawStation.MaxBladeAngle, 1e-3f);
+
+            // A cut can sit behind where the stock started.
+            Near("a negative length is read as one",
+                VexDesigner.UI.SawPanel.ParseInches("-2.5", 0f), -2.5f, 1e-4f);
+
+            Near("and a negative mixed fraction too",
+                VexDesigner.UI.SawPanel.ParseInches("-1 1/2", 0f), -1.5f, 1e-4f);
+        }
+
+        /// <summary>
+        /// The two cut distances: equal on a square cut, and differing by
+        /// exactly the skew of the blade on an angled one.
+        ///
+        /// This is the number a builder actually works to, so it has to be
+        /// right in both directions - typed in as well as read off.
+        /// </summary>
+        private static void TwoDistancesAgree()
+        {
+            PartDefinition definition = Load("CCHL-2");
+
+            if (definition == null)
+            {
+                return;
+            }
+
+            var sawGo = new GameObject("TestSaw");
+            GameObject partGo = PartFactory.Create(definition, withPhysics: false);
+
+            try
+            {
+                var saw = sawGo.AddComponent<SawStation>();
+                var so = new SerializedObject(saw);
+                so.FindProperty("bedY").floatValue = 0f;
+                so.FindProperty("fenceZ").floatValue = 0f;
+                so.FindProperty("bladeX").floatValue = 0f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+
+                if (!saw.Dock(partGo.GetComponent<PartInstance>()))
+                {
+                    True("the channel docks", false);
+                    return;
+                }
+
+                saw.SetFeed(4f);
+                saw.SetBladeAngle(0f);
+
+                Near("a square cut measures the same on both faces",
+                    saw.NearFaceInches, saw.FarFaceInches, 1e-4f);
+
+                // Angled: the two faces part company by the depth times the
+                // tangent of the angle, which is the whole of what a mitre is.
+                saw.SetBladeAngle(30f);
+
+                float expected = saw.StockDepthInches * Mathf.Tan(30f * Mathf.Deg2Rad);
+
+                Near("an angled cut skews by depth times tan",
+                    saw.FarFaceInches - saw.NearFaceInches, expected, 1e-3f);
+
+                True("the long side really is longer",
+                    saw.FarFaceInches > saw.NearFaceInches);
+
+                // Typed in, either way round, and read back unchanged.
+                saw.SetNearFace(6.25f);
+                Near("setting the near face reads back", saw.NearFaceInches, 6.25f, 1e-3f);
+
+                saw.SetFarFace(9.5f);
+                Near("setting the far face reads back", saw.FarFaceInches, 9.5f, 1e-3f);
+
+                // Leaning the other way swaps which side is long.
+                saw.SetBladeAngle(-30f);
+                True("a mitre the other way makes the near side longer",
+                    saw.NearFaceInches > saw.FarFaceInches);
+
+                // And the blade can sit past the end of the stock.
+                saw.SetBladeAngle(0f);
+                saw.SetFeed(-2f);
+
+                Near("a negative feed is kept", saw.FeedInches, -2f, 1e-4f);
+
+                Debug.Log(
+                    "[CuttingTests] distances: stock " +
+                    saw.StockLengthInches.ToString("0.000") + " in, depth " +
+                    saw.StockDepthInches.ToString("0.000") + " in.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(partGo);
+                Object.DestroyImmediate(sawGo);
+            }
         }
 
         // ------------------------------------------------------------------

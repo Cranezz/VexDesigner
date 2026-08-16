@@ -52,8 +52,17 @@ namespace VexDesigner.Parts
         /// </summary>
         public float FeedInches { get; private set; }
 
-        /// <summary>Blade swing, in degrees. Zero is square across.</summary>
+        /// <summary>
+        /// Blade swing in degrees. Zero is square; either sign is a mitre
+        /// leaning that way.
+        /// </summary>
         public float BladeAngle { get; private set; }
+
+        /// <summary>
+        /// How far the head will swing either way. Past sixty degrees the cut
+        /// is longer than the blade and the geometry stops being a saw cut.
+        /// </summary>
+        public const float MaxBladeAngle = 60f;
 
         public PartInstance Docked { get; private set; }
 
@@ -169,13 +178,23 @@ namespace VexDesigner.Parts
 
         public void SetFeed(float inches)
         {
-            FeedInches = Mathf.Max(0f, inches);
+            // Negative is allowed: the blade can sit beyond the end of the
+            // stock, which is what trimming from the far side looks like.
+            // Clamping at zero meant a cut behind the starting point simply
+            // could not be dialled in.
+            FeedInches = inches;
             Reseat();
         }
 
         public void SetBladeAngle(float degrees)
         {
-            BladeAngle = Mathf.Clamp(degrees, 0f, 90f);
+            // Both ways from square, rather than nought to ninety.
+            //
+            // A mitre leans left or right and the difference matters - it
+            // decides which corner of the stock is the long one - so the
+            // natural reading is a signed angle either side of square, not a
+            // number that only goes one way and a hidden mode to say which.
+            BladeAngle = Mathf.Clamp(degrees, -MaxBladeAngle, MaxBladeAngle);
 
             if (bladeVisual != null)
             {
@@ -294,6 +313,129 @@ namespace VexDesigner.Parts
         /// Length of stock past the blade, in inches - what the cut removes.
         /// </summary>
         public float OffcutInches => FeedInches;
+
+        /// <summary>
+        /// Where the blade enters the near face of the stock, measured from
+        /// the kept end - the short side of a mitre.
+        ///
+        /// A cut is quoted this way in a workshop, not as "how far the stock
+        /// was fed". An angled cut meets the two faces of the stock at two
+        /// different places, and which of them a length refers to is the
+        /// single commonest way to cut a part wrong - so both are shown, named,
+        /// and either can be typed in.
+        /// </summary>
+        public float NearFaceInches => KeptLengthInches - (SkewInches * 0.5f);
+
+        /// <summary>
+        /// Where the blade leaves the far face, against the fence - the long
+        /// side of a mitre. Equal to the near face on a square cut.
+        /// </summary>
+        public float FarFaceInches => KeptLengthInches + (SkewInches * 0.5f);
+
+        /// <summary>
+        /// How much further the cut reaches on one face than the other, signed
+        /// by which way the blade leans.
+        /// </summary>
+        public float SkewInches => StockDepthInches * Mathf.Tan(BladeAngle * Mathf.Deg2Rad);
+
+        /// <summary>
+        /// Length of the piece being kept, measured on the centre line.
+        /// </summary>
+        public float KeptLengthInches => Mathf.Max(0f, StockLengthInches - FeedInches);
+
+        /// <summary>How deep the stock is across the fence, in inches.</summary>
+        public float StockDepthInches
+        {
+            get
+            {
+                if (Docked == null || !LocalBounds(out Bounds bounds))
+                {
+                    return 0f;
+                }
+
+                return bounds.size.z / InchesToMetres;
+            }
+        }
+
+        /// <summary>
+        /// Sets the feed so the blade meets the near face at this distance
+        /// from the kept end.
+        /// </summary>
+        public void SetNearFace(float inches)
+        {
+            SetFeed(StockLengthInches - (inches + (SkewInches * 0.5f)));
+        }
+
+        /// <summary>
+        /// Sets the feed so the blade leaves the far face at this distance.
+        /// </summary>
+        public void SetFarFace(float inches)
+        {
+            SetFeed(StockLengthInches - (inches - (SkewInches * 0.5f)));
+        }
+
+        /// <summary>
+        /// The two points where the cut meets the stock, in world space, for
+        /// the dimension lines to be drawn between.
+        /// </summary>
+        public bool CutEndpoints(out Vector3 nearPoint, out Vector3 farPoint, out Vector3 origin)
+        {
+            nearPoint = farPoint = origin = Vector3.zero;
+
+            if (Docked == null || !LocalBounds(out Bounds bounds))
+            {
+                return false;
+            }
+
+            float centreX = bladeX;
+            float halfSkew = SkewInches * 0.5f * InchesToMetres;
+
+            // The near face is the open side of the bed; the far face is
+            // against the fence.
+            nearPoint = transform.TransformPoint(
+                new Vector3(centreX - halfSkew, bedY, bounds.min.z));
+
+            farPoint = transform.TransformPoint(
+                new Vector3(centreX + halfSkew, bedY, bounds.max.z));
+
+            // The end the lengths are measured from: the far end of the piece
+            // being kept.
+            origin = transform.TransformPoint(new Vector3(bounds.min.x, bedY, bounds.min.z));
+            return true;
+        }
+
+        /// <summary>Where the stock starts and ends along the fence, in world space.</summary>
+        public bool StockEnds(out Vector3 left, out Vector3 right)
+        {
+            left = right = Vector3.zero;
+
+            if (Docked == null || !LocalBounds(out Bounds bounds))
+            {
+                return false;
+            }
+
+            left = transform.TransformPoint(new Vector3(bounds.min.x, bedY, bounds.center.z));
+            right = transform.TransformPoint(new Vector3(bounds.max.x, bedY, bounds.center.z));
+            return true;
+        }
+
+        /// <summary>Middle of the stock, where the rotation ball sits.</summary>
+        public Vector3 StockCentre
+        {
+            get
+            {
+                if (Docked == null || !LocalBounds(out Bounds bounds))
+                {
+                    return transform.position;
+                }
+
+                return transform.TransformPoint(bounds.center);
+            }
+        }
+
+        /// <summary>Where the blade meets the bed, for the angle handle.</summary>
+        public Vector3 BladePoint =>
+            transform.TransformPoint(new Vector3(bladeX, bedY, fenceZ));
 
         /// <summary>
         /// How long the stock is along the feed direction, in inches, so the
